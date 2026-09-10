@@ -1,0 +1,113 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="FB_FanucFaultReset" Id="{daeb7cee-3c71-0abb-a37b-b222806c74f1}" SpecialFunc="None">
+    <Declaration><![CDATA[// Sends a FAULT_RESET pulse to the FANUC robot and waits for the fault to clear.
+// Trigger with a rising edge on bReset. Toggle bReset FALSE to reset after Error.
+FUNCTION_BLOCK FB_FanucFaultReset
+VAR_INPUT
+  bReset   : BOOL;            // Rising edge: send fault reset pulse to robot
+  stStatus : ST_FanucStatus;  // Live robot status (from FB_FanucStatus)
+END_VAR
+VAR_IN_OUT
+  stControl : ST_FanucControl;  // Control struct – pass same instance as FB_FanucEnable.stControl
+END_VAR
+VAR_OUTPUT
+  bBusy  : BOOL;                    // TRUE while reset sequence is in progress
+  bDone  : BOOL;                    // One scan TRUE when fault is confirmed cleared
+  bError : BOOL;                    // Fault persisted after reset – operator action needed
+  eState : E_FanucFaultResetState;  // Current state (diagnostic / HMI)
+END_VAR
+VAR
+  _eState    : E_FanucFaultResetState := E_FanucFaultResetState.Idle;
+  rtReset    : R_TRIG;
+  tonPulse   : TON;  // 20 ms FAULT_RESET pulse
+  tonTimeout : TON;  // Timeout waiting for fault to clear after reset
+END_VAR
+VAR CONSTANT
+  tResetPulse   : TIME := T#20MS;  // FAULT_RESET minimum pulse width
+  tFaultTimeout : TIME := T#5S;    // Max time to wait for fault to clear after reset
+END_VAR
+
+(*
+  FB_FanucFaultReset
+  Sends a timed FAULT_RESET pulse (UI[5]) to the robot and monitors bFault until clear.
+
+  Sequence:
+    1. SendPulse  – Assert FAULT_RESET for 20 ms. Robot acts on the rising edge.
+    2. WaitClear  – Wait for bFault (UO[4]) = FALSE. Timeout → Error.
+    3. Done       – bDone TRUE for one scan, then → Idle.
+
+  Usage:
+    - Call every PLC cycle.
+    - Pass the same stControl instance used by FB_FanucEnable (VAR_IN_OUT, by reference).
+    - Trigger with a rising edge on bReset (e.g. HMI button, or automatic from application logic).
+    - Check bDone for one-scan confirmation that the fault cleared.
+    - Check bError if the fault did not clear; set bReset FALSE to reset.
+
+  Relationship with FB_FanucEnable:
+    - FB_FanucEnable.ClearFault state waits for bFault = FALSE without sending any pulse.
+    - This FB is responsible for the actual reset signal; the application decides when to trigger it.
+    - Typically called when FB_FanucEnable.eState = ClearFault and the operator requests a reset.
+*)]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[rtReset(CLK := bReset);
+
+CASE _eState OF
+
+  E_FanucFaultResetState.Idle:
+    stControl.Fault_Reset := FALSE;
+    tonPulse(IN := FALSE);
+    tonTimeout(IN := FALSE);
+    IF rtReset.Q THEN
+      _eState := E_FanucFaultResetState.SendPulse;
+    END_IF
+
+  E_FanucFaultResetState.SendPulse:
+    // Assert FAULT_RESET for exactly 20 ms. Robot acts on the rising edge.
+    tonPulse(IN := TRUE, PT := tResetPulse);
+    stControl.Fault_Reset := NOT tonPulse.Q; // TRUE for first 20 ms, then FALSE
+    IF tonPulse.Q THEN
+      stControl.Fault_Reset := FALSE;
+      tonPulse(IN := FALSE);
+      _eState := E_FanucFaultResetState.WaitClear;
+    END_IF
+
+  E_FanucFaultResetState.WaitClear:
+    // Pulse complete; wait for robot to confirm the fault is gone.
+    stControl.Fault_Reset := FALSE;
+    tonTimeout(IN := TRUE, PT := tFaultTimeout);
+    IF NOT stStatus.bFault THEN
+      tonTimeout(IN := FALSE);
+      _eState := E_FanucFaultResetState.Done;
+    ELSIF tonTimeout.Q THEN
+      _eState := E_FanucFaultResetState.Error;
+    END_IF
+
+  E_FanucFaultResetState.Done:
+    // bDone is TRUE for exactly one scan (derived below), then return to Idle.
+    stControl.Fault_Reset := FALSE;
+    _eState := E_FanucFaultResetState.Idle;
+
+  E_FanucFaultResetState.Error:
+    // Fault did not clear after reset. Reset this FB by setting bReset FALSE.
+    stControl.Fault_Reset := FALSE;
+    IF NOT bReset THEN
+      tonPulse(IN := FALSE);
+      tonTimeout(IN := FALSE);
+      _eState := E_FanucFaultResetState.Idle;
+    END_IF
+
+ELSE
+  _eState := E_FanucFaultResetState.Error;
+
+END_CASE
+
+// ---------- Derived outputs ---------- *)
+eState := _eState;
+bBusy  := (_eState = E_FanucFaultResetState.SendPulse) OR (_eState = E_FanucFaultResetState.WaitClear);
+bDone  := (_eState = E_FanucFaultResetState.Done);
+bError := (_eState = E_FanucFaultResetState.Error);
+]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

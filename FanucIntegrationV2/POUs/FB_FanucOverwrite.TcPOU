@@ -1,0 +1,44 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="FB_FanucOverwrite" Id="{7fe993ee-da03-4a39-824e-7c02eccb23c1}" SpecialFunc="None">
+    <Declaration><![CDATA[// Writes a decimal value (0–nMax) to stControl.nDO3 (EtherCAT byte 3 / GI[25..33]).
+// FB_FanucControl then writes the struct to aDO, so call this BEFORE fbControl.
+FUNCTION_BLOCK FB_FanucOverwrite
+VAR_INPUT
+    nValue  : BYTE;          // Decimal value to send (0–nMax)
+    bEnable : BOOL;           // TRUE = write nValue; FALSE = clear to 0
+    nMax    : BYTE := 100;   // Upper limit — values above this set bError and write 0
+END_VAR
+VAR_IN_OUT
+    stControl : ST_FanucControl;  // Control struct – wire same instance as FB_FanucEnable output
+END_VAR
+VAR_OUTPUT
+    bError  : BOOL;   // TRUE if nValue exceeds nMax
+    nActual : USINT;  // Value currently written
+END_VAR
+
+(*
+  FB_FanucOverwrite
+  Writes a decimal value to stControl.nDO3 (EtherCAT output byte 3 / GI[25..33]).
+  FB_FanucControl maps the struct to aDO each scan, so this FB must be called
+  BEFORE fbControl in MAIN — consistent with all other library FBs.
+
+  TwinCAT maps the integer to 8 bits automatically. For example, value 5 (0000 0101)
+  sets bits 0 and 2 on the FANUC GI channel; value 100 (0110 0100) sets bits 2, 5, 6.
+
+  To extend the range beyond 100, increase nMax up to 255 (USINT limit).
+*)]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[bError := nValue > nMax;
+
+IF bEnable AND NOT bError THEN
+    stControl.overwrite := nValue;
+    nActual        := nValue;
+ELSE
+    stControl.overwrite := 0;
+    nActual        := 0;
+END_IF
+]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,58 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="FB_FanucStatus" Id="{df9eb45c-f9bf-0d9c-9783-95f21f1f968c}" SpecialFunc="None">
+    <Declaration><![CDATA[//Reads EtherCAT input bytes (aDI) into ST_FanucStatus. Call every scan BEFORE any status-dependent logic. Pass GVL_Fanuc.DI0 at the call site.
+FUNCTION_BLOCK FB_FanucStatus
+VAR_IN_OUT
+  aDI : ARRAY[0..15] OF BYTE; // Injected EtherCAT input array – pass GVL_Fanuc.DI0
+END_VAR
+VAR_OUTPUT
+  stStatus : ST_FanucStatus;
+END_VAR
+
+(*
+  FB_FanucStatus
+  Reads the raw EtherCAT input byte array (injected as aDI) and maps
+  each bit to the corresponding field in ST_FanucStatus.
+
+  Call every PLC cycle BEFORE any logic that depends on robot status.
+
+  Library usage – I/O injection:
+    The caller passes the hardware-linked byte array at the call site:
+      fbStatus(aDI := GVL_Fanuc.DI0, stStatus => stStatus);
+    This keeps AT %I* declarations out of the library.
+
+  Signal mapping (FANUC R-30iB Plus, PDO3 – Receive PDO3):
+    aDI[0]  ← Robot UO[1..8]   (CMDENBL, SYSRDY, PROGRUN, PAUSED, HELD, FAULT, ATPERCH, TPENBL)
+    aDI[1]  ← Robot UO[9..10]  (BATALM, BUSY)
+    aDI[2]  ← Robot UO[11..18] (ACK1..ACK8 / SNO1..SNO8)
+*)]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[
+// Status Byte 0  (aDI[0])  —  UO[1..8]
+stStatus.bCmd_Enabled  := aDI[0].0;   // UO[1]  CMDENBL  – command enable
+stStatus.bSystem_Ready := aDI[0].1;   // UO[2]  SYSRDY   – servo powered, no alarm
+stStatus.bPrg_Running  := aDI[0].2;   // UO[3]  PROGRUN  – program in execution
+stStatus.bPrg_Paused   := aDI[0].3;   // UO[4]  PAUSED   – program on hold
+stStatus.bMotion_Held  := aDI[0].4;   // UO[5]  HELD     – HOLD button/signal active
+stStatus.bFault        := aDI[0].5;   // UO[6]  FAULT    – alarm preventing execution
+stStatus.bAt_Home      := aDI[0].6;   // UO[7]  ATPERCH  – robot at reference position 1
+stStatus.bTP_Enabled   := aDI[0].7;   // UO[8]  TPENBL   – teach pendant enable switch ON
+
+// Status Byte 1  (aDI[1])  —  UO[9..10]
+stStatus.bBatteryAlarm := aDI[1].0;   // UO[9]  BATALM   – controller battery low
+stStatus.bBusy         := aDI[1].1;   // UO[10] BUSY     – program executing or TP busy
+
+// Status Byte 2  (aDI[2])  —  UO[11..18]  RSR ACK / SNO
+stStatus.bProg_Start1ACK := aDI[2].0; // UO[11] ACK1/SNO1
+stStatus.bProg_Start2ACK := aDI[2].1; // UO[12] ACK2/SNO2
+stStatus.bProg_Start3ACK := aDI[2].2; // UO[13] ACK3/SNO3
+stStatus.bProg_Start4ACK := aDI[2].3; // UO[14] ACK4/SNO4
+stStatus.bProg_Start5ACK := aDI[2].4; // UO[15] ACK5/SNO5
+stStatus.bProg_Start6ACK := aDI[2].5; // UO[16] ACK6/SNO6
+stStatus.bProg_Start7ACK := aDI[2].6; // UO[17] ACK7/SNO7
+stStatus.bProg_Start8ACK := aDI[2].7; // UO[18] ACK8/SNO8
+]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

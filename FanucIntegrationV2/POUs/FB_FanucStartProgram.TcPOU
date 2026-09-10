@@ -1,0 +1,143 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="FB_FanucStartProgram" Id="{639e9b5b-2378-78fc-0e0b-e22f6bfc1f16}" SpecialFunc="None">
+    <Declaration><![CDATA[//Starts a FANUC program in RSR mode (nProgram 1..8, one-hot 200 ms pulse), gated on bReady. bAck goes TRUE one scan when robot confirms start.
+FUNCTION_BLOCK FB_FanucStartProgram
+VAR_INPUT
+  bStart   : BOOL;              // Rising edge: start program nProgram (gated on bReady)
+  nProgram : INT;               // Program to start: 1..8 (RSR) or 1..255 (PNS)
+  bReady   : BOOL;              // Gate: only start when robot is ready (FB_FanucEnable.bReady)
+  stStatus : ST_FanucStatus;    // Live robot status – used for ACK feedback
+END_VAR
+VAR_IN_OUT
+  stControl : ST_FanucControl;  // Modified in-place: Start_ProgramX 
+END_VAR
+VAR_OUTPUT
+  bBusy  : BOOL;                      // TRUE while start pulse is active
+  bDone  : BOOL;                      // One scan TRUE when pulse complete
+  bAck   : BOOL;                      // One scan TRUE when robot acknowledges the start
+  bError : BOOL;                      // TRUE if nProgram is out of range; set bStart FALSE to reset
+  eState : E_FanucStartProgramState;  // Current state (diagnostic / HMI)
+END_VAR
+VAR
+  _eState      : E_FanucStartProgramState := E_FanucStartProgramState.Idle;
+  rtStart      : R_TRIG;  // Rising-edge detector on bStart AND bReady
+  rtAck        : R_TRIG;  // Rising-edge detector for ACK feedback (RSR mode)
+  rtPrgRunning : R_TRIG;  // Rising-edge detector for PROGRUN (PNS mode)
+  tonPulse     : TON;     // 200 ms start pulse timer
+  nActiveProg  : INT;     // Program number latched at trigger (stable during pulse)
+END_VAR
+
+(*
+  FB_FanucStartProgram
+  Triggers a FANUC robot program start in RSR mode.
+
+  nProgram 1..8 maps to a one-hot 200 ms pulse on Start_Program1..8 (UI[9..16]).
+  The robot acknowledges on the matching ACK bit (UO[11..18]); bAck goes TRUE for one scan.
+
+  Usage:
+    - Call every PLC cycle.
+    - Pass the stControl struct that FB_FanucEnable populated (VAR_IN_OUT).
+      This FB stamps only the Start_ProgramX bits; all other bits are preserved.
+    - Wire bReady from FB_FanucEnable.bReady to gate starts.
+    - Call FB_FanucControl AFTER this FB so it sees the final stControl state.
+
+  Reset:
+    bError latches if nProgram is out of range (1..8). Set bStart FALSE to reset.
+*)]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[// ---------- Edge detect ----------
+rtStart(CLK := bStart AND bReady);
+
+// ---------- State machine ----------
+CASE _eState OF
+
+  E_FanucStartProgramState.Idle:
+    stControl.Start_Program1 := FALSE;
+    stControl.Start_Program2 := FALSE;
+    stControl.Start_Program3 := FALSE;
+    stControl.Start_Program4 := FALSE;
+    stControl.Start_Program5 := FALSE;
+    stControl.Start_Program6 := FALSE;
+    stControl.Start_Program7 := FALSE;
+    stControl.Start_Program8 := FALSE;
+    tonPulse(IN := FALSE);
+    IF rtStart.Q THEN
+      IF nProgram < 1 OR nProgram > 8 THEN
+        _eState := E_FanucStartProgramState.Error;
+      ELSE
+        nActiveProg := nProgram;
+        _eState     := E_FanucStartProgramState.Pulsing;
+      END_IF
+    END_IF
+
+  E_FanucStartProgramState.Pulsing:
+    // One-hot: assert only the bit corresponding to nActiveProg for 200 ms.
+    tonPulse(IN := TRUE, PT := T#200MS);
+    CASE nActiveProg OF
+      1: stControl.Start_Program1 := TRUE;
+      2: stControl.Start_Program2 := TRUE;
+      3: stControl.Start_Program3 := TRUE;
+      4: stControl.Start_Program4 := TRUE;
+      5: stControl.Start_Program5 := TRUE;
+      6: stControl.Start_Program6 := TRUE;
+      7: stControl.Start_Program7 := TRUE;
+      8: stControl.Start_Program8 := TRUE;
+    END_CASE
+    IF tonPulse.Q THEN
+      tonPulse(IN := FALSE);
+      _eState := E_FanucStartProgramState.Done;
+    END_IF
+
+  E_FanucStartProgramState.Done:
+    stControl.Start_Program1 := FALSE;
+    stControl.Start_Program2 := FALSE;
+    stControl.Start_Program3 := FALSE;
+    stControl.Start_Program4 := FALSE;
+    stControl.Start_Program5 := FALSE;
+    stControl.Start_Program6 := FALSE;
+    stControl.Start_Program7 := FALSE;
+    stControl.Start_Program8 := FALSE;
+    _eState := E_FanucStartProgramState.Idle;
+
+  E_FanucStartProgramState.Error:
+    stControl.Start_Program1 := FALSE;
+    stControl.Start_Program2 := FALSE;
+    stControl.Start_Program3 := FALSE;
+    stControl.Start_Program4 := FALSE;
+    stControl.Start_Program5 := FALSE;
+    stControl.Start_Program6 := FALSE;
+    stControl.Start_Program7 := FALSE;
+    stControl.Start_Program8 := FALSE;
+    IF NOT bStart THEN
+      _eState := E_FanucStartProgramState.Idle;
+    END_IF
+
+ELSE
+  _eState := E_FanucStartProgramState.Error;
+
+END_CASE
+
+// ---------- ACK detection ----------
+CASE nActiveProg OF
+  1: rtAck(CLK := stStatus.bProg_Start1ACK);
+  2: rtAck(CLK := stStatus.bProg_Start2ACK);
+  3: rtAck(CLK := stStatus.bProg_Start3ACK);
+  4: rtAck(CLK := stStatus.bProg_Start4ACK);
+  5: rtAck(CLK := stStatus.bProg_Start5ACK);
+  6: rtAck(CLK := stStatus.bProg_Start6ACK);
+  7: rtAck(CLK := stStatus.bProg_Start7ACK);
+  8: rtAck(CLK := stStatus.bProg_Start8ACK);
+ELSE
+  rtAck(CLK := FALSE);
+END_CASE
+
+// ---------- Derived outputs ----------
+eState := _eState;
+bBusy  := (_eState = E_FanucStartProgramState.Pulsing);
+bDone  := (_eState = E_FanucStartProgramState.Done);
+bError := (_eState = E_FanucStartProgramState.Error);
+bAck   := rtAck.Q;]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

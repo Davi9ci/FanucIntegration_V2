@@ -1,0 +1,35 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.19">
+  <DUT Name="ST_FanucControl" Id="{8e1d735f-4267-0b3b-813d-d295b57f3bd3}">
+    <Declaration><![CDATA[TYPE ST_FanucControl : STRUCT
+//  Control byte 0
+  IMSTP			:  BOOL;  //  (* bit 0 *)
+  Hold			:  BOOL;  //  (* bit 1 *)
+  SFSPD			:  BOOL;  //  (* bit 2 *)
+  Cycle_stop	:  BOOL;  //  (* bit 3 *)
+  Fault_Reset	:  BOOL;  //  (* bit 4 *)
+  Start			:  BOOL;  //  (* bit 5 *)
+  Home			:  BOOL;  //  (* bit 6 *)
+  Enable		:  BOOL;  //  (* bit 7 *)
+
+//  Control byte 1  (UI[9..16]  RSR1..RSR8 / PNS1..PNS8)
+  Start_Program1    :  BOOL;  //  UI[9]  RSR1 / PNS bit 0
+  Start_Program2    :  BOOL;  //  UI[10] RSR2 / PNS bit 1
+  Start_Program3    :  BOOL;  //  UI[11] RSR3 / PNS bit 2
+  Start_Program4    :  BOOL;  //  UI[12] RSR4 / PNS bit 3
+  Start_Program5    :  BOOL;  //  UI[13] RSR5 / PNS bit 4
+  Start_Program6    :  BOOL;  //  UI[14] RSR6 / PNS bit 5
+  Start_Program7    :  BOOL;  //  UI[15] RSR7 / PNS bit 6
+  Start_Program8    :  BOOL;  //  UI[16] RSR8 / PNS bit 7
+
+//  Control byte 2  (UI[17..18])
+  PNS_Strobe      :  BOOL;
+  Prod_Start      :  BOOL;  //  UI[18] PROD_START – triggers PNS program execution
+
+//  Control byte 3  (GI[25..33] – user-defined output)
+  Overwrite            :  BYTE;
+END_STRUCT
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

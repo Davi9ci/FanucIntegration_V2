@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <DUT Name="E_FanucEnableState" Id="{80168690-038f-d713-beb2-b94b9c563a4c}">
+    <Declaration><![CDATA[(*
+  States for FB_FanucEnable.
+  The enable sequence progresses: Idle → ClearFault → CheckTP → WaitReady → Ready.
+  From Ready, conditions are monitored continuously (priority order):
+    bFault             → ClearFault
+    bTP_Enabled        → CheckTP
+    bExtIMSTP = FALSE  → EmergencyStop (E-stop; resumes via ClearFault when released)
+    bExtSFSPD = FALSE  → SafeSpeed     (fence open; robot at safe speed; bReady FALSE)
+    bExtHold  = FALSE  → Paused        (HOLD only drops; IMSTP/SFSPD/ENBL held)
+  Toggle bEnable FALSE→TRUE to retry from Idle after an Error.
+*)
+TYPE E_FanucEnableState :
+(
+  Idle              := 0,   // Waiting for bEnable. ENBL de-asserted; bExt* signals pass through.
+  ClearFault        := 1,   // Assert Fault_Reset pulse until bFault clears (5 s timeout → Error).
+  CheckTP           := 3,   // Wait for bTP_Enabled = FALSE (operator must switch TP off).
+  WaitReady         := 4,   // Wait for bCmd_Enabled AND bSystem_Ready (5 s timeout → Error).
+  Ready             := 5,   // Robot is ready. Monitor for all safety/fault conditions.
+  Paused            := 6,   // bExtHold = FALSE: HOLD dropped, IMSTP/SFSPD/ENBL held. Resumes when bExtHold TRUE.
+  EmergencyStop     := 7,   // bExtIMSTP = FALSE: E-stop active. ENBL held. Resumes via ClearFault when IMSTP released.
+  SafeSpeed         := 8,   // bExtSFSPD = FALSE: fence open, robot at safe speed. bReady FALSE. Resumes when fence closes.
+  Error             := 99   // Enable sequence failed. ENBL de-asserted. Toggle bEnable to reset.
+);
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

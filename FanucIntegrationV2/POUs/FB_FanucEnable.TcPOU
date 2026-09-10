@@ -1,0 +1,463 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="FB_FanucEnable" Id="{81fa6fc5-96d5-6645-a3df-cf5fb91c6586}" SpecialFunc="None">
+    <Declaration><![CDATA[// Runs the FANUC enable sequence:
+// Idle -> ClearFault -> CheckTP -> WaitReady -> Ready
+//
+// External stop/hold signals use NC convention:
+// TRUE  = normal / permissive
+// FALSE = stop / hold / safe-speed request
+
+FUNCTION_BLOCK FB_FanucEnable
+VAR_INPUT
+    // Main enable command.
+    // TRUE  = enable sequence requested
+    // FALSE = disable / return to Idle
+    bEnable : BOOL;
+
+    // Live robot status from FB_FanucStatus
+    stStatus : ST_FanucStatus;
+
+    // External interlock signals.
+    // Normally Closed convention:
+    // TRUE  = normal
+    // FALSE = function requested
+    bExtIMSTP : BOOL;   // FALSE = external E-stop requested
+    bExtHold  : BOOL;   // FALSE = pause / hold requested
+    bExtSFSPD : BOOL;   // FALSE = safe-speed requested
+
+    // External program-start command.
+    // Only a rising edge that occurs while Ready is accepted.
+    bExtStart : BOOL;
+END_VAR
+
+
+VAR_OUTPUT
+    // Robot is enabled and ready for program execution
+    bReady : BOOL;
+
+    // Enable sequence failed / timed out
+    bError : BOOL;
+
+    // Teach Pendant is enabled and preventing remote operation
+    bTPWarning : BOOL;
+
+    // Current state for diagnostics / HMI
+    eState : E_FanucEnableState;
+
+    // FANUC control signals
+    stControl : ST_FanucControl;
+END_VAR
+
+
+VAR
+    // Internal state
+    eCurrentState : E_FanucEnableState := E_FanucEnableState.Idle;
+
+    // TRUE only when the complete enable path is allowed.
+    //
+    // bExtStart is intentionally NOT included here.
+    // Start is a command, not an enable permissive.
+    bEnablePermissivesOk : BOOL;
+
+    // Wait for CMDENBL + SYSRDY
+    tonReadyTimeout : TON;
+
+    // Detect actual rising edge of external Start command
+    rtExtStart : R_TRIG;
+
+    // Internal START pulse latch
+    bStartPulseActive : BOOL;
+
+    // START pulse timer
+    tonStartPulse : TON;
+END_VAR
+
+
+VAR CONSTANT
+    // Maximum time to wait for robot-ready feedback
+    tReadyTimeout : TIME := T#5S;
+
+    // FANUC START signal pulse duration
+    tStartPulse : TIME := T#20MS;
+END_VAR
+
+
+(*
+    FB_FanucEnable
+
+    Purpose
+    -------
+    Controls the FANUC remote-enable state machine and produces
+    the required UI control signals.
+
+    Enable sequence
+    ---------------
+
+        Idle
+          |
+          | bEnable
+          | + all interlocks OK
+          | + bExtStart released
+          v
+        ClearFault
+          |
+          | bFault = FALSE
+          v
+        CheckTP
+          |
+          | TP disabled
+          v
+        WaitReady
+          |
+          | CMDENBL + SYSRDY
+          v
+        Ready
+
+
+    Enable permissives
+    ------------------
+    The enable sequence requires:
+
+        bEnable
+        bExtIMSTP
+        bExtHold
+        bExtSFSPD
+
+    These are combined internally as:
+
+        bEnablePermissivesOk
+
+    bExtStart is NOT an enable permissive.
+
+    Start is a momentary command and is handled independently.
+
+
+    ClearFault
+    ----------
+    This FB does NOT generate FAULT_RESET.
+
+    While bFault remains TRUE, the state remains ClearFault.
+
+    Use FB_FanucFaultReset externally to reset the FANUC fault.
+    Once stStatus.bFault becomes FALSE, this FB automatically
+    proceeds to CheckTP.
+
+
+    Start behavior
+    --------------
+    bExtStart must be FALSE before the enable sequence can begin.
+
+    Once Ready, an actual FALSE -> TRUE edge of bExtStart generates
+    a tStartPulse pulse on stControl.Start.
+
+    A Start edge occurring before Ready is ignored.
+
+    If bExtStart is already TRUE when the robot enters Ready,
+    no Start pulse is generated. It must first return FALSE and
+    then receive a new rising edge.
+
+
+    NC signal behavior
+    ------------------
+    Option A: passive while disabled.
+
+    Idle / Error:
+        ENBL  = FALSE
+        IMSTP = TRUE
+        HOLD  = TRUE
+        SFSPD = TRUE
+
+    Active states:
+        ENBL  = TRUE
+        IMSTP = bExtIMSTP
+        HOLD  = bExtHold
+        SFSPD = bExtSFSPD
+
+
+    Error reset
+    -----------
+    To leave Error:
+
+        bEnable := FALSE
+
+    The FB then returns to Idle. A subsequent TRUE starts a new
+    enable sequence.
+*)]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[// Enable permissives
+// ============================================================================
+//
+// These signals determine whether the robot is allowed to proceed through
+// the enable sequence.
+//
+// bExtStart is intentionally NOT included.
+// Start is a command, not a permissive.
+//
+bEnablePermissivesOk := bEnable AND bExtIMSTP AND bExtHold AND bExtSFSPD;
+
+// Start edge detection
+// ============================================================================
+//
+// Detect the REAL external FALSE -> TRUE transition.
+//
+// Do not gate the R_TRIG input with the Ready state. Doing that can create
+// an artificial rising edge when the state changes into Ready while
+// bExtStart is already TRUE.
+
+rtExtStart(CLK := bExtStart);
+
+// Accept the edge only if we were already in Ready when the edge occurred.
+//
+// Because this is evaluated BEFORE the state machine, a Start edge occurring
+// in WaitReady on the same scan that WaitReady -> Ready occurs is ignored.
+//
+IF rtExtStart.Q
+   AND (eCurrentState = E_FanucEnableState.Ready) THEN
+    bStartPulseActive := TRUE;
+END_IF;
+
+
+// Ready timeout
+// ============================================================================
+//
+// Run the timeout only while waiting for the FANUC ready feedback.
+//
+tonReadyTimeout(
+    IN := (eCurrentState = E_FanucEnableState.WaitReady),
+    PT := tReadyTimeout
+);
+
+
+// State machine
+// ============================================================================
+
+CASE eCurrentState OF
+
+    // IDLE ============================================================================
+    E_FanucEnableState.Idle:
+
+        (*Start the enable sequence only when:
+        
+         1. Enable has been requested
+         2. All enable/interlock conditions are healthy
+         3. Start is released
+        
+         Requiring Start to be released prevents an already-held Start
+         command from being accepted when the robot becomes Ready.
+        *)
+		
+        IF bEnablePermissivesOk
+           AND NOT bExtStart THEN
+            eCurrentState := E_FanucEnableState.ClearFault;
+        END_IF;
+
+    // CLEAR FAULT ============================================================================
+    E_FanucEnableState.ClearFault:
+	
+        // Abort the enable sequence if any enable permissive is lost.
+        IF NOT bEnablePermissivesOk THEN
+            eCurrentState := E_FanucEnableState.Idle;
+        // No FAULT_RESET pulse is generated here.
+        // While bFault = TRUE, no transition occurs and the state therefore remains ClearFault.
+        // FB_FanucFaultReset should clear the actual FANUC fault externally.
+
+        ELSIF NOT stStatus.bFault THEN
+            eCurrentState := E_FanucEnableState.CheckTP;
+        END_IF;
+
+
+    // CHECK TEACH PENDANT ============================================================================
+    E_FanucEnableState.CheckTP:
+
+        // Abort if the enable request or any startup interlock is lost.
+        IF NOT bEnablePermissivesOk THEN
+            eCurrentState := E_FanucEnableState.Idle;
+
+        // TP must be disabled for remote operation.
+        ELSIF NOT stStatus.bTP_Enabled THEN
+            eCurrentState := E_FanucEnableState.WaitReady;
+        END_IF;
+
+    // WAIT FOR ROBOT READY ============================================================================
+E_FanucEnableState.WaitReady:
+
+    IF NOT bEnablePermissivesOk THEN
+        eCurrentState:= E_FanucEnableState.Idle;
+
+    // A FANUC fault has priority over becoming Ready.
+    ELSIF stStatus.bFault THEN
+        eCurrentState:= E_FanucEnableState.ClearFault;
+
+    // TP must remain disabled for remote operation.
+    ELSIF stStatus.bTP_Enabled THEN
+        eCurrentState:= E_FanucEnableState.CheckTP;
+
+    // Robot confirms remote command mode and system-ready.
+    ELSIF stStatus.bCmd_Enabled AND stStatus.bSystem_Ready THEN
+        eCurrentState:= E_FanucEnableState.Ready;
+
+    // Robot failed to become ready within the configured timeout.
+    ELSIF tonReadyTimeout.Q THEN
+        eCurrentState:= E_FanucEnableState.Error;
+
+    END_IF;
+
+    // READY ============================================================================
+    E_FanucEnableState.Ready:
+        
+		// Priority:
+        // 1. Disable request
+        // 2. FANUC fault
+        // 3. Teach Pendant
+        // 4. Emergency stop
+        // 5. Safe speed
+        // 6. Hold
+        IF NOT bEnable THEN
+            eCurrentState := E_FanucEnableState.Idle;
+
+        ELSIF stStatus.bFault THEN
+            eCurrentState := E_FanucEnableState.ClearFault;
+
+        ELSIF stStatus.bTP_Enabled THEN
+            eCurrentState := E_FanucEnableState.CheckTP;
+
+        ELSIF NOT bExtIMSTP THEN
+            eCurrentState := E_FanucEnableState.EmergencyStop;
+
+        ELSIF NOT bExtSFSPD THEN
+            eCurrentState := E_FanucEnableState.SafeSpeed;
+
+        // Enter Paused immediately when the external HOLD is asserted.
+        // bMotion_Held is also checked so that robot feedback can put us into Paused even if the hold originated elsewhere.
+        ELSIF NOT bExtHold OR stStatus.bMotion_Held THEN
+            eCurrentState := E_FanucEnableState.Paused;
+        END_IF;
+
+    // PAUSED / HOLD ============================================================================
+    E_FanucEnableState.Paused:
+        IF NOT bEnable THEN
+            eCurrentState := E_FanucEnableState.Idle;
+
+        ELSIF stStatus.bFault THEN
+            eCurrentState := E_FanucEnableState.ClearFault;
+
+        ELSIF stStatus.bTP_Enabled THEN
+            eCurrentState := E_FanucEnableState.CheckTP;
+
+        ELSIF NOT bExtIMSTP THEN
+            eCurrentState := E_FanucEnableState.EmergencyStop;
+
+        ELSIF NOT bExtSFSPD THEN
+            eCurrentState := E_FanucEnableState.SafeSpeed;
+
+        // Do not return to Ready just because bMotion_Held dropped.
+        // The external HOLD request must ALSO be released.
+        ELSIF bExtHold
+              AND NOT stStatus.bMotion_Held THEN
+            eCurrentState := E_FanucEnableState.Ready;
+        END_IF;
+
+
+    // EMERGENCY STOP ============================================================================
+	E_FanucEnableState.EmergencyStop:
+	
+		// Remain here for as long as the external IMSTP request is active.
+		IF NOT bEnable THEN
+			eCurrentState:= E_FanucEnableState.Idle;
+
+		// Once IMSTP is released, pass through ClearFault because
+		// FANUC may require a fault reset before becoming Ready again.
+		ELSIF bExtIMSTP THEN
+			eCurrentState:= E_FanucEnableState.ClearFault;
+			
+		END_IF;
+
+	// SAFE SPEED
+	// ============================================================================
+    E_FanucEnableState.SafeSpeed:
+        IF NOT bEnable THEN
+            eCurrentState := E_FanucEnableState.Idle;
+
+        ELSIF stStatus.bFault THEN
+            eCurrentState := E_FanucEnableState.ClearFault;
+
+        ELSIF stStatus.bTP_Enabled THEN
+            eCurrentState := E_FanucEnableState.CheckTP;
+
+        ELSIF NOT bExtIMSTP THEN
+            eCurrentState := E_FanucEnableState.EmergencyStop;
+
+        // Safe-speed request released.
+		ELSIF bExtSFSPD THEN
+		
+			IF NOT bExtHold OR stStatus.bMotion_Held THEN 
+				eCurrentState:= E_FanucEnableState.Paused;
+			ELSE
+				eCurrentState:= E_FanucEnableState.Ready;
+			END_IF;
+		
+		END_IF;
+
+    // ERROR ============================================================================
+    E_FanucEnableState.Error:
+
+        // Error requires the enable request to be removed before another enable sequence can begin.
+        IF NOT bEnable THEN
+            eCurrentState := E_FanucEnableState.Idle;
+        END_IF;
+
+    // INVALID / UNKNOWN STATE ============================================================================
+    ELSE
+        eCurrentState := E_FanucEnableState.Error;
+END_CASE;
+
+
+// Cancel START pulse if Ready was lost
+// ============================================================================
+// This also handles a fault, TP enable, hold, E-stop, safe-speed request, disable request, etc. occurring during the 20 ms START pulse.
+//
+IF eCurrentState <> E_FanucEnableState.Ready THEN
+    bStartPulseActive := FALSE;
+END_IF;
+
+
+// START pulse timer
+// ============================================================================
+// Once triggered, keep START asserted until tStartPulse has elapsed.
+tonStartPulse(IN := bStartPulseActive, PT := tStartPulse);
+
+// Clear the pulse latch once the pulse duration has elapsed.
+IF tonStartPulse.Q THEN
+    bStartPulseActive := FALSE;
+END_IF;
+
+
+// Derived FANUC control outputs
+// ============================================================================
+
+// ENBL is controlled by the enable state machine.
+stControl.Enable := (eCurrentState <> E_FanucEnableState.Idle) AND (eCurrentState <> E_FanucEnableState.Error);
+
+// External FANUC UOP requests are always passed through.
+stControl.IMSTP := bExtIMSTP;
+stControl.Hold  := bExtHold;
+stControl.SFSPD := bExtSFSPD;
+
+// START is only allowed while Ready.
+stControl.Start := (eCurrentState = E_FanucEnableState.Ready) AND bStartPulseActive;
+
+// Diagnostic outputs
+// ============================================================================
+
+eState := eCurrentState;
+
+bReady := (eCurrentState = E_FanucEnableState.Ready);
+
+bError := (eCurrentState = E_FanucEnableState.Error);
+
+bTPWarning := (eCurrentState = E_FanucEnableState.CheckTP)
+    AND stStatus.bTP_Enabled;]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

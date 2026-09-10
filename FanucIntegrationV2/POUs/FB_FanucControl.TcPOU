@@ -1,0 +1,46 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <POU Name="FB_FanucControl" Id="{6eb22996-056c-23a2-8b8f-39dcb588e3c6}" SpecialFunc="None">
+    <Declaration><![CDATA[(* Writes ST_FanucControl fields TO EtherCAT output bytes (aDO). Call every scan AFTER all control logic is complete. Pass GVL_Fanuc.DO0 AT the call site
+*)
+FUNCTION_BLOCK FB_FanucControl
+VAR_IN_OUT
+  aDO : ARRAY[0..15] OF BYTE; // Injected EtherCAT output array – pass GVL_Fanuc.DO0
+END_VAR
+VAR_INPUT
+  stControl : ST_FanucControl;
+END_VAR
+
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[
+// Control Byte 0  (aDO[0])  —  UI[1..8]
+aDO[0].0 := stControl.IMSTP;        // UI[1]  *IMSTP       NC – hold TRUE; FALSE = software E-stop
+aDO[0].1 := stControl.Hold;         // UI[2]  *HOLD        NC – hold TRUE; FALSE = decelerate & pause
+aDO[0].2 := stControl.SFSPD;        // UI[3]  *SFSPD       NC – hold TRUE; FALSE = safe-speed limit
+aDO[0].3 := stControl.Cycle_stop;   // UI[4]  CSTOPI       pulse to stop/abort current cycle
+aDO[0].4 := stControl.Fault_Reset;  // UI[5]  FAULT_RESET  pulse to reset clearable alarms
+aDO[0].5 := stControl.Start;        // UI[6]  START        falling-edge resumes paused program
+aDO[0].6 := stControl.Home;         // UI[7]  HOME         macro use only
+aDO[0].7 := stControl.Enable;       // UI[8]  ENBL         NC – hold TRUE; FALSE = disable all motion
+
+// Control Byte 1  (aDO[1])  —  UI[9..16]  RSR / PNS
+aDO[1].0 := stControl.Start_Program1; // UI[9]  RSR1 / PNS bit 0
+aDO[1].1 := stControl.Start_Program2; // UI[10] RSR2 / PNS bit 1
+aDO[1].2 := stControl.Start_Program3; // UI[11] RSR3 / PNS bit 2
+aDO[1].3 := stControl.Start_Program4; // UI[12] RSR4 / PNS bit 3
+aDO[1].4 := stControl.Start_Program5; // UI[13] RSR5 / PNS bit 4
+aDO[1].5 := stControl.Start_Program6; // UI[14] RSR6 / PNS bit 5
+aDO[1].6 := stControl.Start_Program7; // UI[15] RSR7 / PNS bit 6
+aDO[1].7 := stControl.Start_Program8; // UI[16] RSR8 / PNS bit 7
+
+// Control Byte 2  (aDO[2])  —  UI[17..18]
+aDO[2].0 := stControl.PNS_Strobe;                   // UI[17] reserved
+aDO[2].1 := stControl.Prod_Start;   // UI[18] PROD_START – triggers PNS program execution
+
+// Control Byte 3  (aDO[3])  —  GI[25..33] user-defined output
+aDO[3] := stControl.Overwrite;
+]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

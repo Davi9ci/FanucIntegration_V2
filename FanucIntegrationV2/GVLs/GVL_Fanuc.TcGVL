@@ -1,0 +1,19 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <GVL Name="GVL_Fanuc" Id="{e5e2b97a-5b4b-a27a-799c-517483e7454b}">
+    <Declaration><![CDATA[{attribute 'qualified_only'}
+VAR_GLOBAL
+
+  DI0    AT %I*  :   ARRAY [0..15] OF BYTE;
+  DI1    AT %I*  :   ARRAY [0..15] OF BYTE;
+  DI2    AT %I*  :   ARRAY [0..15] OF BYTE;
+  DI3    AT %I*  :   ARRAY [0..15] OF BYTE;
+
+  DO0    AT %Q*  :   ARRAY [0..15] OF BYTE;
+  DO1    AT %Q*  :   ARRAY [0..15] OF BYTE;
+  DO2    AT %Q*  :   ARRAY [0..15] OF BYTE;
+  DO3    AT %Q*  :   ARRAY [0..15] OF BYTE;
+
+END_VAR]]></Declaration>
+  </GVL>
+</TcPlcObject>

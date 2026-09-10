@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <DUT Name="E_FanucHomingState" Id="{a420d0f4-2149-0bfc-1973-4e8eeb137e39}">
+    <Declaration><![CDATA[(*
+  States for FB_FanucHoming.
+  Sequence: Idle → RequestHome → WaitComplete → Done (→ Idle).
+  Error on timeout; reset by setting bStart FALSE.
+*)
+TYPE E_FanucHomingState :
+(
+  Idle         := 0,   // Waiting for bStart rising edge (interlocked by bReady).
+  RequestHome  := 1,   // HOME signal (UI[7]) pulsed for 20 ms to trigger homing macro.
+  WaitComplete := 2,   // Waiting for bAt_Home (UO[7]) = TRUE (configurable timeout).
+  Done         := 3,   // Homing confirmed – bDone TRUE for one scan, then → Idle.
+  Error        := 99   // Timeout waiting for completion. Set bStart FALSE to reset.
+);
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

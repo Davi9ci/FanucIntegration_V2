@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+  <DUT Name="E_FanucStartProgramState" Id="{e5f6a7b8-c9d0-1234-ef01-234567890abc}">
+    <Declaration><![CDATA[(*
+  States for FB_FanucStartProgram.
+  Sequence: Idle → Pulsing → Done (→ Idle)
+  Error on invalid program number; reset by setting bStart FALSE.
+*)
+TYPE E_FanucStartProgramState :
+(
+	Idle    := 0,   // Waiting for bStart rising edge.
+	Pulsing := 1,   // Program start bits asserted for 200 ms.
+	Done    := 2,   // Pulse complete – bDone TRUE for one scan, then → Idle.
+	Error   := 99   // Program number out of range. Set bStart FALSE to reset.
+);
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>
