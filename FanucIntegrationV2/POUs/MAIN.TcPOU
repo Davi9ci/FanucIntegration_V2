@@ -54,12 +54,14 @@ fbEnable(
     bExtHold  := bExtHold,    // Wire from: NOT bPauseButton
     bExtSFSPD := bExtSFSPD,   // Wire from: bFenceOK / area scanner
     bExtStart := bExtStart,   // Wire from: HMI start button
+	tReadyTimeout := T#5S,
     stControl => stControl);
 
 // 3. Homing
 fbHoming(
     bStart    := bStartHome,
     bReady    := fbEnable.bReady,
+	tHomingTimeout := T#15S, 
     stStatus  := stStatus,
     stControl := stControl);
 	

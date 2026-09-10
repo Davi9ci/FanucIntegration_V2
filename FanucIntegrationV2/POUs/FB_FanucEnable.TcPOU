@@ -29,6 +29,9 @@ VAR_INPUT
     // External program-start command.
     // Only a rising edge that occurs while Ready is accepted.
     bExtStart : BOOL;
+	
+	// Maximum time to wait for robot-ready feedback
+    tReadyTimeout : TIME := T#5S;
 END_VAR
 
 
@@ -75,8 +78,6 @@ END_VAR
 
 
 VAR CONSTANT
-    // Maximum time to wait for robot-ready feedback
-    tReadyTimeout : TIME := T#5S;
 
     // FANUC START signal pulse duration
     tStartPulse : TIME := T#20MS;

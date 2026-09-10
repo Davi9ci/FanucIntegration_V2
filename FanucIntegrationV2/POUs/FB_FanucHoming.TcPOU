@@ -2,130 +2,341 @@
 <TcPlcObject Version="1.1.0.1">
   <POU Name="FB_FanucHoming" Id="{d5b90ddc-612f-021f-8e89-4af80ef73b07}" SpecialFunc="None">
     <Declaration><![CDATA[// Executes the FANUC robot homing sequence via HOME (UI[7]).
-// Rising edge on bStart triggers a 20 ms HOME pulse to call the homing macro on the robot.
-// Completion is confirmed by bAt_Home (UO[7]) going TRUE. Set bStart FALSE to reset after Error.
+//
+// A rising edge of bStart is accepted only while the robot is Ready.
+// The FB generates a HOME pulse for tHomePulse and then waits for
+// bAt_Home feedback to confirm completion.
+//
+// If robot Ready is lost during the homing sequence, the FB returns to Idle.
+
 FUNCTION_BLOCK FB_FanucHoming
+
 VAR_INPUT
-  bStart    : BOOL;            // Rising edge: start homing (interlocked by bReady)
-  bReady    : BOOL;            // From FB_FanucEnable.bReady – homing only starts when robot is enabled
-  stStatus  : ST_FanucStatus;  // Live robot status
+    // External homing command.
+    // Only a rising edge that occurs while bReady = TRUE is accepted.
+    bStart : BOOL;
+
+    // Robot ready indication from FB_FanucEnable.
+    // Homing can only start and continue while the robot is Ready.
+    bReady : BOOL;
+
+    // Maximum time allowed for the homing operation to complete.
+    tHomingTimeout : TIME := T#30S;
+	
+    // Live robot status from FB_FanucStatus.
+    stStatus : ST_FanucStatus;
 END_VAR
+
 VAR_IN_OUT
-  stControl : ST_FanucControl; // Control struct – wire same instance as FB_FanucEnable output
+    // Shared FANUC control structure.
+    // Use the same instance passed through FB_FanucEnable,
+    // FB_FanucHoming and FB_FanucControl.
+    stControl : ST_FanucControl;
 END_VAR
+
 VAR_OUTPUT
-  bBusy     : BOOL;                 // TRUE while homing is in progress
-  bDone     : BOOL;                 // One scan TRUE when bAt_Home confirmed
-  bError    : BOOL;                 // TRUE on timeout; set bStart FALSE to reset
-  eState    : E_FanucHomingState;   // Current state (diagnostic / HMI)
+    // TRUE while a homing sequence is in progress.
+    bBusy : BOOL;
+
+    // TRUE for one PLC scan when homing completes successfully.
+    bDone : BOOL;
+
+    // TRUE when the homing completion timeout expires.
+    bError : BOOL;
+
+    // Current state for diagnostics / HMI.
+    eState : E_FanucHomingState;
 END_VAR
+
 VAR
-  eCurrentState         : E_FanucHomingState := E_FanucHomingState.Idle;
-  rtStart         : R_TRIG;
-  tonHomePulse    : TON;   // 20 ms HOME signal pulse
-  tonWaitComplete : TON;   // Timeout waiting for bAt_Home (configurable via tHomingTimeout)
+    // Internal state.
+    eCurrentState : E_FanucHomingState := E_FanucHomingState.Idle;
+
+    // Detect actual rising edge of external Home command.
+    rtStart : R_TRIG;
+
+    // HOME command pulse timer.
+    tonHomePulse : TON;
+
+    // Timeout waiting for bAt_Home confirmation.
+    tonHomingTimeout : TON;
 END_VAR
+
 VAR CONSTANT
-  tHomePulse    : TIME := T#200MS;  // HOME signal minimum pulse width
-  tHomingTimeout : TIME := T#30S; // Max time allowed for homing macro to complete
+    // FANUC HOME signal pulse duration.
+    tHomePulse : TIME := T#200MS;
+
 END_VAR
 
 (*
-  FB_FanucHoming
-  Executes the robot homing procedure as a state machine.
+    FB_FanucHoming
 
-  HOME (UI[7]) is configured on the FANUC controller to trigger a macro (typically a Karel
-  or TP program) that drives the robot to its home position.  Completion is indicated by
-  bAt_Home (UO[7]) going TRUE.
+    Purpose
+    -------
+    Controls the FANUC homing sequence and generates the HOME (UI[7])
+    command used to trigger the configured homing macro or program.
 
-  Sequence:
-    1. RequestHome  – Assert HOME (UI[7]) for 20 ms to trigger the homing macro.
-    2. WaitComplete – Wait for bAt_Home (UO[7]) = TRUE (timeout: tHomingTimeout).
-    3. Done         – bDone TRUE for one scan; state returns to Idle.
 
-  Interlocks:
-    - bStart is edge-detected and gated by bReady. Homing is only triggered when the
-      robot is enabled and ready for remote operation.
-    - If bAt_Home is already TRUE when homing is requested, WaitComplete completes
-      immediately and bDone is asserted for one scan.
+    Homing sequence
+    ---------------
 
-  Error handling:
-    - If bAt_Home does not go TRUE within tHomingTimeout, the FB transitions to Error.
-    - Set bStart FALSE to acknowledge and reset to Idle.
+        Idle
+          |
+          | bStart rising edge
+          | + bReady
+          v
+        RequestHome
+          |
+          | HOME asserted for tHomePulse
+          v
+        WaitComplete
+          |
+          | bAt_Home = TRUE
+          v
+        Done
+          |
+          | one PLC scan
+          v
+        Idle
 
-  Prerequisites on the FANUC controller:
-    - A macro or TP program must be assigned to the HOME input (UI[7]).
-    - UO[7] (At Perch/Home) must be configured to reflect the robot's home position.
 
-  Usage:
-    - Call every PLC cycle.
-    - Pass the same stControl instance used by FB_FanucEnable and FB_FanucControl.
-    - Wire bReady from FB_FanucEnable.bReady.
-    - Give bStart a rising edge to begin. Monitor bBusy / bDone / bError.
-*)
-]]></Declaration>
+    Start behavior
+    --------------
+    bStart is treated as a momentary command.
+
+    The R_TRIG detects the actual external FALSE -> TRUE transition:
+
+        rtStart(CLK := bStart);
+
+    The edge is accepted only when:
+
+        bReady = TRUE
+        AND
+        eCurrentState = Idle
+
+    A Start edge occurring while the robot is not Ready is ignored.
+
+    If bStart goes TRUE before bReady becomes TRUE and remains TRUE,
+    becoming Ready must NOT automatically start homing.
+
+    bStart must first return FALSE and then receive a new rising edge.
+
+
+    HOME pulse
+    ----------
+    RequestHome represents the HOME command pulse state.
+
+    While RequestHome is active:
+
+        stControl.Home = TRUE
+
+    The HOME signal remains asserted for:
+
+        tHomePulse
+
+    After the pulse completes, the FB transitions to WaitComplete.
+
+
+    Homing completion
+    -----------------
+    While in WaitComplete, the FB waits for:
+
+        stStatus.bAt_Home = TRUE
+
+    Once confirmed, the FB transitions to Done.
+
+    bDone is TRUE for one PLC scan before the state returns to Idle.
+
+
+    Ready interlock
+    ---------------
+    Homing may only start while:
+
+        bReady = TRUE
+
+    If bReady becomes FALSE during RequestHome or WaitComplete,
+    the FB stops considering the homing sequence valid and returns
+    to Idle.
+
+    Returning this FB to Idle does not necessarily cancel a FANUC
+    program or macro that has already started. Actual robot stopping
+    behavior is controlled by the FANUC controller and its other UOP
+    control inputs.
+
+
+    Timeout
+    -------
+    While in WaitComplete, tonHomingTimeout runs for:
+
+        tHomingTimeout
+
+    If bAt_Home is not confirmed before the timeout expires,
+    the FB transitions to Error.
+
+
+    Error reset
+    -----------
+    To leave Error:
+
+        bStart := FALSE
+
+    The FB then returns to Idle.
+
+    A new FALSE -> TRUE edge of bStart is required before another
+    homing sequence can begin.
+
+
+    FANUC prerequisites
+    -------------------
+    - HOME (UI[7]) must be configured to trigger the required
+      homing macro or program.
+
+    - stStatus.bAt_Home must represent the FANUC home-position
+      feedback used by the application.
+
+
+    Usage
+    -----
+    - Call this FB every PLC cycle.
+
+    - Wire bReady from:
+
+          FB_FanucEnable.bReady
+
+    - Pass the same stControl instance used by the other FANUC
+      command FBs and by FB_FanucControl.
+
+    - Generate a rising edge on bStart to request homing.
+
+    - Monitor:
+
+          bBusy
+          bDone
+          bError
+          eState
+*)]]></Declaration>
     <Implementation>
-      <ST><![CDATA[// ---------- Edge detect ----------
+      <ST><![CDATA[// Start edge detection
+// ============================================================================
+//
+// Detect the real external FALSE -> TRUE transition.
+// Do not gate R_TRIG with bReady.
+//
 rtStart(CLK := bStart);
 
-// ---------- State machine ----------
+
+// State machine
+// ============================================================================
+
 CASE eCurrentState OF
 
-  E_FanucHomingState.Idle:
-    stControl.Home := FALSE;
-    tonHomePulse(IN := FALSE);
-    tonWaitComplete(IN := FALSE);
-    IF rtStart.Q THEN
-      eCurrentState := E_FanucHomingState.RequestHome;
-    END_IF
+    // IDLE ====================================================================
+    E_FanucHomingState.Idle:
 
-  E_FanucHomingState.RequestHome:
-    // Assert HOME (UI[7]) for 20 ms to trigger the homing macro.
-    tonHomePulse(IN := TRUE, PT := tHomePulse);
-    stControl.Home := NOT tonHomePulse.Q;  // TRUE for first 20 ms, then FALSE
-    IF tonHomePulse.Q THEN
-      stControl.Home := FALSE;
-      tonHomePulse(IN := FALSE);
-      eCurrentState := E_FanucHomingState.WaitComplete;
-    END_IF
+        // Accept Home only if the rising edge occurs while robot is Ready.
+        IF rtStart.Q AND bReady THEN
+			
+            eCurrentState := E_FanucHomingState.RequestHome;
+			
+        END_IF;
 
-  E_FanucHomingState.WaitComplete:
-    // Wait for the robot to confirm it has reached home (UO[7]).
-    // If bAt_Home is already TRUE the state completes immediately.
-    stControl.Home := FALSE;
-    tonWaitComplete(IN := TRUE, PT := tHomingTimeout);
-    IF stStatus.bAt_Home THEN
-      tonWaitComplete(IN := FALSE);
-      eCurrentState := E_FanucHomingState.Done;
-    ELSIF tonWaitComplete.Q THEN
-      tonWaitComplete(IN := FALSE);
-      eCurrentState := E_FanucHomingState.Error;
-    END_IF
 
-  E_FanucHomingState.Done:
-    // bDone is TRUE for one scan (derived below), then → Idle.
-    stControl.Home := FALSE;
-    eCurrentState := E_FanucHomingState.Idle;
+    // REQUEST HOME ============================================================
+    E_FanucHomingState.RequestHome:
 
-  E_FanucHomingState.Error:
-    // bAt_Home did not go TRUE within tHomingTimeout.
-    // Set bStart FALSE to reset.
-    stControl.Home := FALSE;
-    IF NOT bStart THEN
-      eCurrentState := E_FanucHomingState.Idle;
-    END_IF
+        // Abort this FB sequence if robot Ready is lost.
+        IF NOT bReady THEN
 
-ELSE
-  eCurrentState := E_FanucHomingState.Error;
+            eCurrentState := E_FanucHomingState.Idle;
 
-END_CASE
+        // HOME pulse completed.
+        ELSIF tonHomePulse.Q THEN
 
-// ---------- Derived outputs ----------
+            eCurrentState := E_FanucHomingState.WaitComplete;
+
+        END_IF;
+
+
+    // WAIT FOR HOME ===========================================================
+    E_FanucHomingState.WaitComplete:
+
+        IF NOT bReady THEN
+
+            eCurrentState := E_FanucHomingState.Idle;
+
+        // FANUC confirms Home position.
+        ELSIF stStatus.bAt_Home THEN
+
+            eCurrentState := E_FanucHomingState.Done;
+
+        // Homing did not complete in time.
+        ELSIF tonHomingTimeout.Q THEN
+
+            eCurrentState := E_FanucHomingState.Error;
+
+        END_IF;
+
+
+    // DONE ====================================================================
+    E_FanucHomingState.Done:
+
+        // Done is exposed for one PLC scan.
+        eCurrentState := E_FanucHomingState.Idle;
+
+
+    // ERROR ===================================================================
+    E_FanucHomingState.Error:
+
+        // Require Start to be released before allowing another attempt.
+        IF NOT bStart THEN
+
+            eCurrentState := E_FanucHomingState.Idle;
+
+        END_IF;
+
+
+    // INVALID / UNKNOWN STATE =================================================
+    ELSE
+
+        eCurrentState := E_FanucHomingState.Error;
+
+END_CASE;
+
+
+// Timers
+// ============================================================================
+//
+// Timers are enabled only by their corresponding state.
+
+tonHomePulse(
+    IN := (eCurrentState = E_FanucHomingState.RequestHome),
+    PT := tHomePulse
+);
+
+tonHomingTimeout(
+    IN := (eCurrentState = E_FanucHomingState.WaitComplete),
+    PT := tHomingTimeout
+);
+
+
+// Derived FANUC control output
+// ============================================================================
+//
+// HOME is asserted only during RequestHome and drops as soon as the
+// configured pulse time has elapsed.
+
+stControl.Home := (eCurrentState = E_FanucHomingState.RequestHome) AND NOT tonHomePulse.Q;
+
+// Diagnostic outputs
+// ============================================================================
+
 eState := eCurrentState;
-bBusy  := (eCurrentState = E_FanucHomingState.RequestHome) OR (eCurrentState = E_FanucHomingState.WaitComplete);
-bDone  := (eCurrentState = E_FanucHomingState.Done);
-bError := (eCurrentState = E_FanucHomingState.Error);
-]]></ST>
+
+bBusy := (eCurrentState = E_FanucHomingState.RequestHome) OR (eCurrentState = E_FanucHomingState.WaitComplete);
+
+bDone := (eCurrentState = E_FanucHomingState.Done);
+
+bError := (eCurrentState = E_FanucHomingState.Error);]]></ST>
     </Implementation>
   </POU>
 </TcPlcObject>
