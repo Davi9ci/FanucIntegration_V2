@@ -4,68 +4,97 @@
     <Declaration><![CDATA[// Starts a FANUC program using RSR1..RSR8.
 //
 // A rising edge of bStart is accepted only while the robot is Ready.
-// The selected RSR signal is pulsed for tProgramPulse.
-// Completion is confirmed by the corresponding FANUC ACK signal.
+// The requested program number is latched when the command is accepted.
+//
+// The selected RSR signal is asserted for tProgramPulse.
+// During and after the pulse, the FB waits for the corresponding
+// FANUC ACK signal.
+//
+// Completion is confirmed only when a fresh ACK is received.
 //
 // If robot Ready is lost during the sequence, the FB returns to Idle.
 
 FUNCTION_BLOCK FB_FanucStartProgram
 
 VAR_INPUT
+
     // External program-start request.
-    // Only a rising edge occurring while bReady = TRUE is accepted.
     bStart : BOOL;
 
-    // RSR program number: 1..8.
+    // RSR program number. Valid range: 1..8.
     nProgram : INT;
 
-    // Robot ready indication from FB_FanucEnable.
+    // Robot Ready indication from FB_FanucEnable.
+    // Program start can only begin and continue while Ready.
     bReady : BOOL;
 
-    // Maximum time allowed for FANUC to acknowledge the program request.
+    // Maximum time allowed after the RSR pulse
+    // for FANUC to acknowledge the program request.
     tAckTimeout : TIME := T#2S;
 
     // Live robot status from FB_FanucStatus.
     stStatus : ST_FanucStatus;
+
 END_VAR
+
 
 VAR_IN_OUT
-    // Shared FANUC control structure.
+
     stControl : ST_FanucControl;
+
 END_VAR
 
+
 VAR_OUTPUT
-    // TRUE while program-start sequence is active.
+
+    // TRUE while the program-start sequence is active.
     bBusy : BOOL;
 
-    // TRUE for one PLC scan when FANUC acknowledges the request.
+    // TRUE for one PLC scan when FANUC acknowledges the requested program successfully.
     bDone : BOOL;
 
-    // TRUE on invalid program number or ACK timeout.
+    // TRUE when:
+    // - nProgram is outside 1..8
+    // - FANUC does not acknowledge before tAckTimeout
     bError : BOOL;
 
     // Current state for diagnostics / HMI.
     eState : E_FanucStartProgramState;
+
 END_VAR
 
-VAR
-    eCurrentState : E_FanucStartProgramState :=
-        E_FanucStartProgramState.Idle;
 
-    // Detect actual external FALSE -> TRUE transition.
+VAR
+
+    // Internal state.
+    eCurrentState : E_FanucStartProgramState := E_FanucStartProgramState.Idle;
+
+    // Detect actual FALSE -> TRUE transition of external Start.
     rtStart : R_TRIG;
 
-    // Program number latched when request is accepted.
+    // Program number latched when a request is accepted.
+    // This prevents nProgram changes during the sequence
+    // from changing the active RSR output.
     nActiveProgram : INT;
 
-    // Selected ACK feedback.
+    // ACK corresponding to nActiveProgram.
     bActiveAck : BOOL;
+
+    // TRUE once the selected ACK has first been observed LOW.
+    //
+    // This prevents an ACK that was already TRUE before the
+    // new command from being accepted as a fresh acknowledgement.
+    bAckArmed : BOOL;
+
+    // TRUE once a valid fresh ACK has been detected.
+    bAckSeen : BOOL;
 
     // RSR output pulse timer.
     tonProgramPulse : TON;
 
-    // Timeout waiting for FANUC ACK.
+    // Timeout waiting for FANUC acknowledgement.
     tonAckTimeout : TON;
+
 END_VAR
 
 VAR CONSTANT
@@ -75,18 +104,15 @@ END_VAR]]></Declaration>
     <Implementation>
       <ST><![CDATA[// Start edge detection
 // ============================================================================
-//
-// Detect the actual external FALSE -> TRUE transition.
-// Do NOT gate R_TRIG with bReady.
-//
 rtStart(CLK := bStart);
 
 
 // Selected ACK
 // ============================================================================
 //
-// Select the ACK corresponding to the latched RSR program.
+// Select the acknowledgement corresponding to the latched program.
 CASE nActiveProgram OF
+
     1: bActiveAck := stStatus.bProg_Start1ACK;
     2: bActiveAck := stStatus.bProg_Start2ACK;
     3: bActiveAck := stStatus.bProg_Start3ACK;
@@ -97,31 +123,59 @@ CASE nActiveProgram OF
     8: bActiveAck := stStatus.bProg_Start8ACK;
 
 ELSE
+
     bActiveAck := FALSE;
+
 END_CASE;
+
+
+// ACK detection
+// ============================================================================
+
+IF (eCurrentState = E_FanucStartProgramState.Pulsing) OR (eCurrentState = E_FanucStartProgramState.WaitAck) THEN
+
+    // Arm acknowledgement detection once ACK is LOW.
+    IF NOT bActiveAck THEN
+
+        bAckArmed := TRUE;
+
+    END_IF;
+
+    // Once armed, ACK becoming TRUE confirms the request.
+    IF bAckArmed AND bActiveAck THEN
+
+        bAckSeen := TRUE;
+
+    END_IF;
+
+END_IF;
 
 
 // State machine
 // ============================================================================
-
 CASE eCurrentState OF
 
-    // IDLE ====================================================================
+    // IDLE
+    // ========================================================================
     E_FanucStartProgramState.Idle:
 
-        // Accept Start only if the rising edge occurs while robot is Ready.
+        // Accept Start only when the external rising edge
+        // occurs while the robot is already Ready.
         IF rtStart.Q AND bReady THEN
 
-            // RSR supports programs 1..8.
+            // RSR supports program selections 1..8.
             IF (nProgram < 1) OR (nProgram > 8) THEN
 
                 eCurrentState := E_FanucStartProgramState.Error;
 
             ELSE
 
-                // Latch the requested program so it cannot change
-                // during the sequence.
+                // Latch program selection.
                 nActiveProgram := nProgram;
+
+                // Start a completely new acknowledgement cycle.
+                bAckArmed := FALSE;
+                bAckSeen  := FALSE;
 
                 eCurrentState := E_FanucStartProgramState.Pulsing;
 
@@ -130,28 +184,38 @@ CASE eCurrentState OF
         END_IF;
 
 
-    // PULSING =================================================================
+
+    // PULSING
+    // ========================================================================
     E_FanucStartProgramState.Pulsing:
 
-        // Robot must remain Ready during the request.
+        // Robot must remain Ready during the start request.
         IF NOT bReady THEN
 
             eCurrentState := E_FanucStartProgramState.Idle;
 
-        // FANUC may acknowledge before the 200 ms pulse has finished.
-        ELSIF bActiveAck THEN
-
-            eCurrentState := E_FanucStartProgramState.Done;
-
-        // RSR pulse completed - now wait for ACK.
+        // Always complete the configured RSR pulse.
         ELSIF tonProgramPulse.Q THEN
 
-            eCurrentState := E_FanucStartProgramState.WaitAck;
+            // If FANUC already acknowledged during the pulse,
+            // the request is complete.
+            IF bAckSeen THEN
+
+                eCurrentState := E_FanucStartProgramState.Done;
+
+            ELSE
+
+                // Pulse finished but no ACK yet.
+                eCurrentState := E_FanucStartProgramState.WaitAck;
+
+            END_IF;
 
         END_IF;
 
 
-    // WAIT ACK ================================================================
+
+    // WAIT ACK
+    // ========================================================================
     E_FanucStartProgramState.WaitAck:
 
         // Abort the FB sequence if Ready is lost.
@@ -160,11 +224,11 @@ CASE eCurrentState OF
             eCurrentState := E_FanucStartProgramState.Idle;
 
         // Matching FANUC ACK received.
-        ELSIF bActiveAck THEN
+        ELSIF bAckSeen THEN
 
             eCurrentState := E_FanucStartProgramState.Done;
 
-        // FANUC failed to acknowledge the request.
+        // FANUC failed to acknowledge the request in time.
         ELSIF tonAckTimeout.Q THEN
 
             eCurrentState := E_FanucStartProgramState.Error;
@@ -172,14 +236,16 @@ CASE eCurrentState OF
         END_IF;
 
 
-    // DONE ====================================================================
+    // DONE
+    // ========================================================================
     E_FanucStartProgramState.Done:
 
-        // Done / Ack are exposed for one PLC scan.
+        // bDone is exposed for one PLC scan.
         eCurrentState := E_FanucStartProgramState.Idle;
 
 
-    // ERROR ===================================================================
+    // ERROR
+    // ========================================================================
     E_FanucStartProgramState.Error:
 
         // Require Start to be released before another attempt.
@@ -190,7 +256,8 @@ CASE eCurrentState OF
         END_IF;
 
 
-    // INVALID / UNKNOWN STATE =================================================
+    // INVALID / UNKNOWN STATE
+    // ========================================================================
     ELSE
 
         eCurrentState := E_FanucStartProgramState.Error;
@@ -200,23 +267,39 @@ END_CASE;
 
 // Timers
 // ============================================================================
+//
+// Each timer is enabled only by its corresponding state.
 
 tonProgramPulse(
     IN := (eCurrentState = E_FanucStartProgramState.Pulsing),
-    PT := tProgramPulse
-);
+    PT := tProgramPulse);
+
 
 tonAckTimeout(
     IN := (eCurrentState = E_FanucStartProgramState.WaitAck),
-    PT := tAckTimeout
-);
+    PT := tAckTimeout);
 
 
-// FANUC RSR outputs
+// Clear internal handshake state while Idle
 // ============================================================================
-//
+// Once no program-start sequence is active, forget the previous
+// acknowledgement state.
+
+IF eCurrentState = E_FanucStartProgramState.Idle THEN
+
+    bAckArmed := FALSE;
+    bAckSeen  := FALSE;
+
+END_IF;
+
+
+// FANUC RSR control outputs
+// ============================================================================
 // Default all RSR signals FALSE.
 //
+// This guarantees one-hot behavior and ensures all outputs are removed
+// immediately whenever the FB leaves Pulsing.
+
 stControl.Start_Program1 := FALSE;
 stControl.Start_Program2 := FALSE;
 stControl.Start_Program3 := FALSE;
@@ -227,23 +310,28 @@ stControl.Start_Program7 := FALSE;
 stControl.Start_Program8 := FALSE;
 
 
-// Assert exactly one RSR signal while Pulsing.
-//
-IF (eCurrentState = E_FanucStartProgramState.Pulsing)
-    AND NOT tonProgramPulse.Q THEN
+
+// Assert selected RSR signal
+// ============================================================================
+// Exactly one RSR signal is asserted while Pulsing.
+
+IF (eCurrentState = E_FanucStartProgramState.Pulsing) AND NOT tonProgramPulse.Q THEN
 
     CASE nActiveProgram OF
-        1: stControl.Start_Program1 := TRUE;
-        2: stControl.Start_Program2 := TRUE;
-        3: stControl.Start_Program3 := TRUE;
-        4: stControl.Start_Program4 := TRUE;
-        5: stControl.Start_Program5 := TRUE;
-        6: stControl.Start_Program6 := TRUE;
-        7: stControl.Start_Program7 := TRUE;
-        8: stControl.Start_Program8 := TRUE;
+
+        1:stControl.Start_Program1 := TRUE;
+        2:stControl.Start_Program2 := TRUE;
+        3:stControl.Start_Program3 := TRUE;
+        4:stControl.Start_Program4 := TRUE;
+        5:stControl.Start_Program5 := TRUE;
+        6:stControl.Start_Program6 := TRUE;
+        7:stControl.Start_Program7 := TRUE;
+        8:stControl.Start_Program8 := TRUE;
+
     END_CASE;
 
 END_IF;
+
 
 
 // Diagnostic outputs
@@ -251,10 +339,13 @@ END_IF;
 
 eState := eCurrentState;
 
+// Busy while transmitting the RSR command or waiting for ACK.
 bBusy := (eCurrentState = E_FanucStartProgramState.Pulsing) OR (eCurrentState = E_FanucStartProgramState.WaitAck);
 
+// Done is TRUE for exactly one PLC scan after a valid ACK.
 bDone := (eCurrentState = E_FanucStartProgramState.Done);
 
+// Error remains TRUE until bStart is released.
 bError := (eCurrentState = E_FanucStartProgramState.Error);]]></ST>
     </Implementation>
   </POU>
