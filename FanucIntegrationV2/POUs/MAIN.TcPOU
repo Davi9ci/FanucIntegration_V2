@@ -70,6 +70,7 @@ fbStartProgram(
     bStart    := bStartProgram,
     nProgram  := nProgram,
     bReady    := fbEnable.bReady,
+	tAckTimeout := T#2S,
     stStatus  := stStatus,
     stControl := stControl);
 
