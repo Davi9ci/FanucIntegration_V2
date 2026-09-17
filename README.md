@@ -32,18 +32,6 @@ END_VAR
 
 The application developer must then link these arrays to the corresponding FANUC EtherCAT input and output process data in the TwinCAT I/O configuration.
 
-The library function blocks receive the application-owned arrays at their call sites:
-
-```iecst
-fbStatus(
-	aDI := GVL_Fanuc.DI0,
-	stStatus => stStatus);
-
-fbControl(
-	aDO := GVL_Fanuc.DO0,
-	stControl := stControl);
-```
-
 > **Important:** This project controls FANUC UOP signals. It does not replace the robot controller's safety functions, safety PLC, DCS configuration, or required machine risk assessment.
 
 ---
