@@ -9,7 +9,7 @@
     <WriteProductVersion>false</WriteProductVersion>
     <GenerateTpy>false</GenerateTpy>
     <Name>FanucIntegrationV2</Name>
-    <ProgramVersion>3.1.4026.25</ProgramVersion>
+    <ProgramVersion>3.1.4026.26</ProgramVersion>
     <Application>{f3730c8f-05b0-4b93-9c50-67313e02bfca}</Application>
     <TypeSystem>{92abf203-a8dc-4c1c-862b-01d233fca593}</TypeSystem>
     <Implicit_Task_Info>{708afccb-dcae-4e72-99e3-12e2ad8a0a92}</Implicit_Task_Info>
@@ -80,6 +80,10 @@
     <Folder Include="POUs" />
   </ItemGroup>
   <ItemGroup>
+    <PlaceholderReference Include="FanucSimple">
+      <DefaultResolution>FanucSimple, * (Beckhoff Automation IL)</DefaultResolution>
+      <Namespace>FanucSimple</Namespace>
+    </PlaceholderReference>
     <PlaceholderReference Include="Tc2_Standard">
       <DefaultResolution>Tc2_Standard, * (Beckhoff Automation GmbH)</DefaultResolution>
       <Namespace>Tc2_Standard</Namespace>

@@ -9,8 +9,16 @@
 // The actual FANUC behavior depends on the controller setting
 // "CSTOPI for ABORT":
 //
-// FALSE = stop at the end of the current cycle
-// TRUE  = abort the running program immediately
+// DISABLE:
+//     Programs waiting in the RSR queue are cleared.
+//     The currently running program continues until completion.
+//
+// ENABLE:
+//     Programs waiting in the RSR queue are cleared.
+//     The currently running program is immediately aborted.
+//
+// This setting is configured in the FANUC controller and cannot
+// be selected through this function block.
 //
 // No acknowledgement is available for CSTOPI. Therefore, bDone
 // indicates that the output pulse was transmitted—not that robot

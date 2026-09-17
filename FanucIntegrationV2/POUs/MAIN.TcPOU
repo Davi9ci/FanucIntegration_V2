@@ -88,9 +88,13 @@ fbStartProgram(
 	
 // 5. Cycle stop
 fbCycleStop(
-    bTrigger  := bCycleStop,
-    stControl := stControl);
-
+	bStart:= bCycleStop, 
+	tCycleStopPulse:= T#20MS, 
+	stControl:= stControl, 
+	bBusy=> , 
+	bDone=> , 
+	eState=> );
+	
 // 6. Fault reset (call when fbEnable.eState = ClearFault and operator requests)
 fbFaultReset(
     bReset    := bFaultReset,
