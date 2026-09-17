@@ -1,85 +1,123 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+<TcPlcObject Version="1.1.0.1">
   <POU Name="FB_FanucCycleStop" Id="{d5a33dbe-22de-9816-1841-daac460200c0}" SpecialFunc="None">
-    <Declaration><![CDATA[// Sends the CSTOPI (UI[4]) Cycle Stop signal to the FANUC robot.
-// Rising edge on bTrigger sends a 20 ms pulse; bDone goes TRUE for one scan when complete.
+    <Declaration><![CDATA[// Sends the FANUC Cycle Stop command using CSTOPI (UI[4]).
+//
+// A rising edge of bStart generates a CSTOPI pulse for
+// tCycleStopPulse.
+//
+// The actual FANUC behavior depends on the controller setting
+// "CSTOPI for ABORT":
+//
+// FALSE = stop at the end of the current cycle
+// TRUE  = abort the running program immediately
+//
+// No acknowledgement is available for CSTOPI. Therefore, bDone
+// indicates that the output pulse was transmitted—not that robot
+// motion has stopped.
+
 FUNCTION_BLOCK FB_FanucCycleStop
+
 VAR_INPUT
-  bTrigger   : BOOL;   // Rising edge: send Cycle Stop command
+    // External Cycle Stop request.
+    // Only a real FALSE -> TRUE edge is accepted.
+    bStart : BOOL;
+
+    // Duration for which CSTOPI is asserted.
+    tCycleStopPulse : TIME := T#20MS;
 END_VAR
+
 VAR_IN_OUT
-  stControl  : ST_FanucControl;   // Control struct – wire same instance as FB_FanucEnable output
+    // Shared FANUC control structure.
+    stControl : ST_FanucControl;
 END_VAR
+
 VAR_OUTPUT
-  bBusy      : BOOL;               // TRUE while pulse is active
-  bDone      : BOOL;               // One scan TRUE when cycle stop pulse is complete
-  eState     : E_FanucCstopiState; // Current state (diagnostic / HMI)
+    // TRUE while CSTOPI is being asserted.
+    bBusy : BOOL;
+
+    // TRUE for one PLC scan after the CSTOPI pulse completes.
+    bDone : BOOL;
+
+    // Current state for diagnostics / HMI.
+    eState : E_FanucCstopiState;
 END_VAR
+
 VAR
-  _eState   : E_FanucCstopiState := E_FanucCstopiState.Idle;
-  rtTrigger : R_TRIG;
-  tonPulse  : TON;   // 20 ms CSTOPI pulse width
-END_VAR
-VAR CONSTANT
-  tPulse : TIME := T#20MS;   // CSTOPI minimum pulse width (spec: ≥15 ms)
-END_VAR
+    // Internal state.
+    eCurrentState : E_FanucCstopiState :=
+        E_FanucCstopiState.Idle;
 
-(*
-  FB_FanucCycleStop
-  Sends a 20 ms CSTOPI pulse (UI[4]) to the FANUC robot.
+    // Detect the actual FALSE -> TRUE transition.
+    rtStart : R_TRIG;
 
-  CSTOPI clears programs waiting on RSR. The effect on the running program depends
-  on the "CSTOPI for ABORT" setting on the controller (MENU → SYSTEM → Config item 6):
-    DISABLE – program stops at the end of its current cycle (graceful stop).
-    ENABLE  – program is immediately aborted at the current line.
-  This FB sends the pulse unconditionally; the controller setting determines the behaviour.
-
-  Usage:
-    - Call every PLC cycle.
-    - Pass the same stControl instance used by FB_FanucEnable and FB_FanucControl.
-    - Give bTrigger a rising edge to issue the command.
-    - bDone goes TRUE for one scan when the 20 ms pulse is complete.
-*)
-]]></Declaration>
+    // CSTOPI output pulse timer.
+    tonCycleStopPulse : TON;
+END_VAR]]></Declaration>
     <Implementation>
-      <ST><![CDATA[// ---------- Edge detect ----------
-rtTrigger(CLK := bTrigger);
+      <ST><![CDATA[// Start edge detection
+// ============================================================================
+rtStart(CLK := bStart);
 
-// ---------- State machine ----------
-CASE _eState OF
+// State machine
+// ============================================================================
+CASE eCurrentState OF
 
-  E_FanucCstopiState.Idle:
-    stControl.Cycle_stop := FALSE;
-    tonPulse(IN := FALSE);
-    IF rtTrigger.Q THEN
-      _eState := E_FanucCstopiState.Pulsing;
-    END_IF
+    // IDLE
+    // ========================================================================
+    E_FanucCstopiState.Idle:
 
-  E_FanucCstopiState.Pulsing:
-    // Assert CSTOPI for 20 ms, then → Done.
-    tonPulse(IN := TRUE, PT := tPulse);
-    stControl.Cycle_stop := NOT tonPulse.Q;  // TRUE for first 20 ms, then FALSE
-    IF tonPulse.Q THEN
-      stControl.Cycle_stop := FALSE;
-      tonPulse(IN := FALSE);
-      _eState := E_FanucCstopiState.Done;
-    END_IF
+        IF rtStart.Q THEN
+            eCurrentState := E_FanucCstopiState.Pulsing;
+        END_IF;
 
-  E_FanucCstopiState.Done:
-    // bDone is TRUE for one scan (derived below), then → Idle.
-    stControl.Cycle_stop := FALSE;
-    _eState := E_FanucCstopiState.Idle;
+    // PULSING
+    // ========================================================================
+    E_FanucCstopiState.Pulsing:
 
-ELSE
-  _eState := E_FanucCstopiState.Idle;
+        IF tonCycleStopPulse.Q THEN
+            eCurrentState := E_FanucCstopiState.Done;
+        END_IF;
 
-END_CASE
+    // DONE
+    // ========================================================================
+    E_FanucCstopiState.Done:
 
-// ---------- Derived outputs ----------
-eState := _eState;
-bBusy  := (_eState = E_FanucCstopiState.Pulsing);
-bDone  := (_eState = E_FanucCstopiState.Done);
-]]></ST>
+        // bDone is exposed for one PLC scan.
+        eCurrentState := E_FanucCstopiState.Idle;
+
+    // INVALID / UNKNOWN STATE
+    // ========================================================================
+    ELSE
+
+        // Cycle Stop has no error-recovery sequence.
+        // Return safely to Idle and remove CSTOPI.
+        eCurrentState := E_FanucCstopiState.Idle;
+
+END_CASE;
+
+// Cycle Stop pulse timer
+// ============================================================================
+// The timer is called exactly once per PLC scan.
+
+tonCycleStopPulse(
+    IN := (eCurrentState = E_FanucCstopiState.Pulsing),
+    PT := tCycleStopPulse
+);
+
+// FANUC control output
+// ============================================================================
+// CSTOPI is asserted only while the pulse is active.
+
+stControl.Cycle_stop :=
+    (eCurrentState = E_FanucCstopiState.Pulsing)
+    AND NOT tonCycleStopPulse.Q;
+
+// Diagnostic outputs
+// ============================================================================
+eState := eCurrentState;
+bBusy := (eCurrentState = E_FanucCstopiState.Pulsing);
+bDone := (eCurrentState = E_FanucCstopiState.Done);]]></ST>
     </Implementation>
   </POU>
 </TcPlcObject>

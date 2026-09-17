@@ -48,32 +48,44 @@ fbStatus(aDI := GVL_Fanuc.DI0, stStatus => stStatus);
 
 // 2. Enable sequence (outputs stControl; other FBs stamp into it below)
 fbEnable(
-    bEnable   := bEnableRobot,
-    stStatus  := stStatus,
-    bExtIMSTP := bExtIMSTP,   // Wire from: NOT bSoftEStop
-    bExtHold  := bExtHold,    // Wire from: NOT bPauseButton
-    bExtSFSPD := bExtSFSPD,   // Wire from: bFenceOK / area scanner
-    bExtStart := bExtStart,   // Wire from: HMI start button
+    bEnable		:= bEnableRobot,
+    stStatus	:= stStatus,
+    bExtIMSTP	:= bExtIMSTP,   // Wire from: NOT bSoftEStop
+    bExtHold	:= bExtHold,    // Wire from: NOT bPauseButton
+    bExtSFSPD	:= bExtSFSPD,   // Wire from: bFenceOK / area scanner
+    bExtStart 	:= bExtStart,   // Wire from: HMI start button
 	tReadyTimeout := T#5S,
+	bReady=> , 
+	bError=> , 
+	bTPWarning=> , 
+	eState=> , 
     stControl => stControl);
-
+	
 // 3. Homing
 fbHoming(
     bStart    := bStartHome,
     bReady    := fbEnable.bReady,
 	tHomingTimeout := T#15S, 
     stStatus  := stStatus,
-    stControl := stControl);
+    stControl := stControl,
+	bBusy=> , 
+	bDone=> , 
+	bError=> , 
+	eState=> );
 	
 // 4. Program start 
 fbStartProgram(
-    bStart    := bStartProgram,
-    nProgram  := nProgram,
-    bReady    := fbEnable.bReady,
-	tAckTimeout := T#2S,
-    stStatus  := stStatus,
-    stControl := stControl);
-
+	bStart		:= bStartProgram, 
+	nProgram	:= nProgram , 
+	bReady		:= fbEnable.bReady, 
+	tAckTimeout	:= T#2S , 
+	stStatus	:= stStatus, 
+	stControl	:= stControl, 
+	bRequestActive=> , 
+	bDone=> , 
+	bError=> , 
+	eState=> );
+	
 // 5. Cycle stop
 fbCycleStop(
     bTrigger  := bCycleStop,
