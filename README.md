@@ -1,21 +1,27 @@
 # FanucIntegration_V2
 
-Ready-made function blocks for controlling a FANUC R-30iB Plus robot over EtherCAT using the FANUC EtherCAT Slave option (R-30iB Plus, PDO3 mapping). Handles the full enable sequence, safety signal management, fault reset, homing, cycle stop, program start (RSR), and user-defined output overwrite.
+Ready-made function blocks for controlling a FANUC R-30iB Plus robot over EtherCAT using the FANUC EtherCAT Slave option (R-30iB Plus, PDO3 mapping). Handles the full enable sequence, safety signal management, fault reset, homing, cycle stop, program start (RSR), and speed override through a FANUC Group Input.
 
 ---
+##Installation
 
-## Installation
+### Install the library
 
-A pre-compiled TwinCAT library file (`.library`) is available for download. Installing the library is the recommended approach - it does not require copying individual FB source files into your project.
+1. Open **TwinCAT XAE**.
+2. Open **PLC → Library Repository**.
+3. Select **Install** and choose the `FanucSimpleLib.library` file.
 
-**To install Library:** open TwinCAT XAE → PLC → References → Library repository → install.
+### Add the library to a project
 
-**To Add Library:** open TwinCAT XAE → PLC → References → Add Library → browse under Miscellaneous. The FBs, DUTs, and GVLs will be available immediately.
+1. Open the PLC project.
+2. Right-click **References** and select **Add Library**.
+3. Find the library under **Miscellaneous** and add it.
 
-The source files in this repository are the reference implementation. Use them if you need to modify the library or understand the internals.
+### Application Global Variables
 
-** Global Variable:** The application should declare the hardware-linked variables after referencing the library:
+The application should declare the hardware-linked variables after referencing the library:
 
+Create a Global Variable List named GVL_Fanuc in the consuming PLC application and add the following variables:
 ```iecst
 {attribute 'qualified_only'}
 VAR_GLOBAL
@@ -42,11 +48,6 @@ fbControl(
 
 ---
 
-## Global veriables 
-
-
-	
-	
 ## Function Blocks
 
 | Function block | Purpose |
@@ -323,7 +324,7 @@ Before commissioning:
 ```text
 FanucIntegrationV2/
 ├── DUTs/    Status/control structures and state enumerations
-├── GVLs/    EtherCAT process-data arrays
+├── GVLs/    EtherCAT process-data arrays. `GVL_Fanuc` is included in the reference project but excluded from the compiled library.
 └── POUs/    FANUC interface and command function blocks
 ```
 
