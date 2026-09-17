@@ -3,45 +3,44 @@
   <POU Name="MAIN" Id="{6973d23a-8789-7e7c-9fcc-0e3b7f231cb5}" SpecialFunc="None">
     <Declaration><![CDATA[PROGRAM MAIN
 VAR
-  // ---------- Core robot interface (library FBs) ----------
-  fbStatus        : FB_FanucStatus;        // DI0 byte array → stStatus struct
-  fbControl       : FB_FanucControl;       // stControl struct → DO0 byte array
-  fbEnable        : FB_FanucEnable;        // Enable sequence state machine
-  fbFaultReset    : FB_FanucFaultReset;    // Fault reset pulse – FAULT_RESET (UI[5])
-  fbStartProgram  : FB_FanucStartProgram;  // Program start – RSR (UI[9..16])
-  fbCycleStop     : FB_FanucCycleStop;     // Cycle Stop – CSTOPI (UI[4])
-  fbHoming        : FB_FanucHoming;        // Homing sequence – HOME (UI[7])
-  stStatus        : ST_FanucStatus;        // Live robot status (inputs)
-  stControl       : ST_FanucControl;       // Combined control command (outputs)
-  fbOverwrite     : FB_FanucOverwrite;     // Writes byOverwrite value to GI[25..33] via stControl
+	// ---------- Core robot interface (library FBs) ----------
+	fbStatus			: FB_FanucStatus;			// DI0 byte array → stStatus struct
+	fbControl			: FB_FanucControl;			// stControl struct → DO0 byte array
+	fbEnable			: FB_FanucEnable;			// Enable sequence state machine
+	fbFaultReset		: FB_FanucFaultReset;		// Fault reset pulse – FAULT_RESET (UI[5])
+	fbStartProgram		: FB_FanucStartProgram;		// Program start – RSR (UI[9..16])
+	fbCycleStop			: FB_FanucCycleStop;		// Cycle Stop – CSTOPI (UI[4])
+	fbHoming			: FB_FanucHoming;			// Homing sequence – HOME (UI[7])
+	stStatus			: ST_FanucStatus;			// Live robot status (inputs)
+	stControl			: ST_FanucControl;			// Combined control command (outputs)
+	fbSpeedOverride		: FB_FanucSpeedOverride;	// Writes byOverwrite value to GI[25..33] via stControl
 
-  // ---------- Enable command ----------
-  bEnableRobot : BOOL;               // Set TRUE to start enable sequence
+	// ---------- Enable command ----------
+	bEnableRobot		: BOOL;	// Set TRUE to start enable sequence
 
-  // ── External interlock signals (wire from application safety logic / HMI) ─
-  bExtIMSTP  : BOOL;  // Normally Closed: FALSE = software E-stop
-  bExtHold   : BOOL;  // Normally Closed: FALSE = pause/hold robot
-  bExtSFSPD  : BOOL;  // Normally Closed: FALSE = safe-speed limit active
-  bExtStart  : BOOL;  // Rising edge triggers a 20 ms START pulse when in Ready state
+	// ---------- External interlock signals ----------
+	bExtIMSTP			: BOOL;		// Normally closed: FALSE = software E-stop
+	bExtHold			: BOOL;		// Normally closed: FALSE = pause/hold robot
+	bExtSFSPD			: BOOL;		// Normally closed: FALSE = safe-speed limit active
+	bExtStart			: BOOL;		// Rising edge triggers a 20 ms START pulse when Ready
 
-  // ---------- Homing ----------
-  bStartHome   : BOOL;               // Rising edge: start homing sequence (gated by bReady)
+	// ---------- Homing ----------
+	bStartHome			: BOOL;		// Rising edge: start homing sequence (gated by bReady)
 
-  // ---------- Program start ----------
-  bStartProgram : BOOL;              // Rising edge: start program nProgram (gated by bReady)
-  nProgram      : INT := 1;          // Program to start: 1..8 (RSR)
+	// ---------- Program start ----------
+	bStartProgram		: BOOL;		// Rising edge: start nProgram (gated by bReady)
+	nProgram			: INT := 1;	// Program to start: 1..8 (RSR)
 
-  // ---------- Cycle Stop ----------
-  bCycleStop   : BOOL;               // Rising edge: send CSTOPI cycle stop command
+	// ---------- Cycle stop ----------
+	bCycleStop			: BOOL;		// Rising edge: send CSTOPI cycle-stop command
 
-  // ──----------Fault reset ----------
-  bFaultReset  : BOOL;               // Rising edge: send FAULT_RESET pulse (UI[5])
+	// ---------- Fault reset ----------
+	bFaultReset			: BOOL;		// Rising edge: send FAULT_RESET pulse (UI[5])
 
-  // ---------- Speed Overwrite ----------
-  byOverwrite    : BYTE;             // Value sent to GI[25..33] via fbOverwrite (0–100)
-  
-END_VAR
-]]></Declaration>
+	// ---------- Speed override ----------
+	byOverwrite			: BYTE;		// Value sent to GI[25..33] via fbSpeedOverride (0–100)
+	
+END_VAR]]></Declaration>
     <Implementation>
       <ST><![CDATA[// 1. Read status – always first
 fbStatus(aDI := GVL_Fanuc.DI0, stStatus => stStatus);
@@ -102,12 +101,12 @@ fbFaultReset(
     stControl := stControl);
 
 // 7. Control robot speed via Overwrite
-fbOverwrite(
-	nValue:= byOverwrite , 
-	bEnable:= TRUE  , 
-	nMax:= 100, 
-	stControl:= stControl);
-
+fbSpeedOverride(
+	nOverwrite:= byOverwrite ,
+	stControl:= stControl ,
+	bError=>,
+	nActual=>);
+	
 // 8. Write outputs – always last
 fbControl(aDO := GVL_Fanuc.DO0, stControl := stControl);
 ]]></ST>
