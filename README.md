@@ -1,11 +1,52 @@
 # FanucIntegration_V2
 
-TwinCAT 3 PLC interface for controlling a FANUC robot through EtherCAT-mapped FANUC UOP signals.
+Ready-made function blocks for controlling a FANUC R-30iB Plus robot over EtherCAT using the FANUC EtherCAT Slave option (R-30iB Plus, PDO3 mapping). Handles the full enable sequence, safety signal management, fault reset, homing, cycle stop, program start (RSR), and user-defined output overwrite.
 
-The project converts raw EtherCAT process data into structured FANUC status and control information and provides function blocks for enabling the robot, resetting faults, starting RSR programs, stopping a cycle, homing, and setting the speed override.
+---
+
+## Installation
+
+A pre-compiled TwinCAT library file (`.library`) is available for download. Installing the library is the recommended approach - it does not require copying individual FB source files into your project.
+
+**To install Library:** open TwinCAT XAE → PLC → References → Library repository → install.
+
+**To Add Library:** open TwinCAT XAE → PLC → References → Add Library → browse under Miscellaneous. The FBs, DUTs, and GVLs will be available immediately.
+
+The source files in this repository are the reference implementation. Use them if you need to modify the library or understand the internals.
+
+** Global Variable:** The application should declare the hardware-linked variables after referencing the library:
+
+```iecst
+{attribute 'qualified_only'}
+VAR_GLOBAL
+	DI0 AT %I* : ARRAY[0..15] OF BYTE;
+	DO0 AT %Q* : ARRAY[0..15] OF BYTE;
+END_VAR
+```
+
+The application developer must then link these arrays to the corresponding FANUC EtherCAT input and output process data in the TwinCAT I/O configuration.
+
+The library function blocks receive the application-owned arrays at their call sites:
+
+```iecst
+fbStatus(
+	aDI := GVL_Fanuc.DI0,
+	stStatus => stStatus);
+
+fbControl(
+	aDO := GVL_Fanuc.DO0,
+	stControl := stControl);
+```
 
 > **Important:** This project controls FANUC UOP signals. It does not replace the robot controller's safety functions, safety PLC, DCS configuration, or required machine risk assessment.
 
+---
+
+## Global veriables 
+
+
+	
+	
 ## Function Blocks
 
 | Function block | Purpose |

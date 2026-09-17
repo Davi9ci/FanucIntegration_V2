@@ -1,8 +1,9 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+<TcPlcObject Version="1.1.0.1">
   <POU Name="FB_FanucControl" Id="{6eb22996-056c-23a2-8b8f-39dcb588e3c6}" SpecialFunc="None">
-    <Declaration><![CDATA[(* Writes ST_FanucControl fields TO EtherCAT output bytes (aDO). Call every scan AFTER all control logic is complete. Pass GVL_Fanuc.DO0 AT the call site
-*)
+    <Declaration><![CDATA[// Writes ST_FanucControl fields to EtherCAT output bytes (aDO).
+// Should be called every scan after all control logic is complete.
+
 FUNCTION_BLOCK FB_FanucControl
 VAR_IN_OUT
   aDO : ARRAY[0..15] OF BYTE; // Injected EtherCAT output array – pass GVL_Fanuc.DO0
