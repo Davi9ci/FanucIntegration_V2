@@ -119,11 +119,11 @@ Important behavior:
 - `ClearFault` does not generate FAULT_RESET. Use `FB_FanucFaultReset` separately.
 - `WaitReady` requires both CMDENBL and SYSRDY.
 - `tReadyTimeout` defaults to `T#5S`.
-- A true rising edge of `bExtStart` while already Ready generates a fixed 20 ms START pulse.
-- A Start edge before Ready is ignored.
-- A held Start does not execute automatically when Ready is reached.
-- Fault, TP enable, E-stop, safe speed, and hold are monitored continuously.
-- Release `bEnable` to reset the Error state.
+- A true rising edge of `bExtStart` while already **Ready** generates a fixed 20 ms START pulse.
+- A **Start** edge before Ready is ignored.
+- A held **Start** does not execute automatically when **Ready** is reached.
+- **Fault**, **TP enable**, **E-stop**, **safe speed**, and **hold** are monitored continuously.
+- Release `bEnable` to reset the **Error state**.
 
 ## FB_FanucFaultReset
 
@@ -155,7 +155,7 @@ Important behavior:
 - The corresponding ACK is monitored during and after the pulse.
 - ACK detection is armed only after the selected ACK has been observed LOW, preventing a stale HIGH ACK from completing a new request.
 - `tAckTimeout` defaults to `T#2S` and applies after the RSR pulse.
-- Loss of Ready returns the function block to Idle and removes the RSR output.
+- Loss of **Ready** returns the function block to Idle and removes the RSR output.
 - `bRequestActive` is TRUE while pulsing or waiting for ACK.
 - `bDone` is TRUE for one scan after a fresh matching ACK.
 - Invalid program selection or ACK timeout enters Error; release `bStart` to reset it.
