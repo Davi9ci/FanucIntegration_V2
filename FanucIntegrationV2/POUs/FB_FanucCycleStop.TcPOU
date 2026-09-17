@@ -21,7 +21,7 @@
 // be selected through this function block.
 //
 // No acknowledgement is available for CSTOPI. Therefore, bDone
-// indicates that the output pulse was transmitted—not that robot
+// indicates that the output pulse was transmitted-not that robot
 // motion has stopped.
 
 FUNCTION_BLOCK FB_FanucCycleStop

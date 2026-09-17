@@ -15,7 +15,7 @@ END_VAR
 ]]></Declaration>
     <Implementation>
       <ST><![CDATA[
-// Control Byte 0  (aDO[0])  —  UI[1..8]
+// Control Byte 0  (aDO[0])  -  UI[1..8]
 aDO[0].0 := stControl.IMSTP;        // UI[1]  *IMSTP       NC – hold TRUE; FALSE = software E-stop
 aDO[0].1 := stControl.Hold;         // UI[2]  *HOLD        NC – hold TRUE; FALSE = decelerate & pause
 aDO[0].2 := stControl.SFSPD;        // UI[3]  *SFSPD       NC – hold TRUE; FALSE = safe-speed limit
@@ -25,7 +25,7 @@ aDO[0].5 := stControl.Start;        // UI[6]  START        falling-edge resumes 
 aDO[0].6 := stControl.Home;         // UI[7]  HOME         macro use only
 aDO[0].7 := stControl.Enable;       // UI[8]  ENBL         NC – hold TRUE; FALSE = disable all motion
 
-// Control Byte 1  (aDO[1])  —  UI[9..16]  RSR / PNS
+// Control Byte 1  (aDO[1])  -  UI[9..16]  RSR / PNS
 aDO[1].0 := stControl.Start_Program1; // UI[9]  RSR1 / PNS bit 0
 aDO[1].1 := stControl.Start_Program2; // UI[10] RSR2 / PNS bit 1
 aDO[1].2 := stControl.Start_Program3; // UI[11] RSR3 / PNS bit 2
@@ -35,11 +35,11 @@ aDO[1].5 := stControl.Start_Program6; // UI[14] RSR6 / PNS bit 5
 aDO[1].6 := stControl.Start_Program7; // UI[15] RSR7 / PNS bit 6
 aDO[1].7 := stControl.Start_Program8; // UI[16] RSR8 / PNS bit 7
 
-// Control Byte 2  (aDO[2])  —  UI[17..18]
+// Control Byte 2  (aDO[2])  -  UI[17..18]
 aDO[2].0 := stControl.PNS_Strobe;                   // UI[17] reserved
 aDO[2].1 := stControl.Prod_Start;   // UI[18] PROD_START – triggers PNS program execution
 
-// Control Byte 3  (aDO[3])  —  GI[25..33] user-defined output
+// Control Byte 3  (aDO[3])  -  GI[25..33] user-defined output
 aDO[3] := stControl.Overwrite;
 ]]></ST>
     </Implementation>
