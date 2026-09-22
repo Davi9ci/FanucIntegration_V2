@@ -168,7 +168,7 @@ rtExtStart(CLK := bExtStart);
 //
 // Because this is evaluated BEFORE the state machine, a Start edge occurring
 // in WaitReady on the same scan that WaitReady -> Ready occurs is ignored.
-//
+
 IF rtExtStart.Q
    AND (eCurrentState = E_FanucEnableState.Ready) THEN
     bStartPulseActive := TRUE;
@@ -184,7 +184,6 @@ tonReadyTimeout(
     IN := (eCurrentState = E_FanucEnableState.WaitReady),
     PT := tReadyTimeout
 );
-
 
 // State machine
 // ============================================================================
@@ -413,8 +412,7 @@ bReady := (eCurrentState = E_FanucEnableState.Ready);
 
 bError := (eCurrentState = E_FanucEnableState.Error);
 
-bTPWarning := (eCurrentState = E_FanucEnableState.CheckTP)
-    AND stStatus.bTP_Enabled;]]></ST>
+bTPWarning := (eCurrentState = E_FanucEnableState.CheckTP) AND stStatus.bTP_Enabled;]]></ST>
     </Implementation>
   </POU>
 </TcPlcObject>

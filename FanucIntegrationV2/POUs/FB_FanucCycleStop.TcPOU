@@ -82,13 +82,14 @@ tonCycleStopPulse(
 // CSTOPI is asserted only while the pulse is active.
 
 stControl.Cycle_stop :=
-    (eCurrentState = E_FanucCstopiState.Pulsing)
-    AND NOT tonCycleStopPulse.Q;
+    (eCurrentState = E_FanucCstopiState.Pulsing) AND NOT tonCycleStopPulse.Q;
 
 // Diagnostic outputs
 // ============================================================================
 eState := eCurrentState;
+
 bBusy := (eCurrentState = E_FanucCstopiState.Pulsing);
+
 bDone := (eCurrentState = E_FanucCstopiState.Done);]]></ST>
     </Implementation>
   </POU>

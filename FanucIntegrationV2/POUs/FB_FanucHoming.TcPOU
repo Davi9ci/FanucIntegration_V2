@@ -191,7 +191,6 @@ END_VAR
 //
 rtStart(CLK := bStart);
 
-
 // State machine
 // ============================================================================
 
@@ -202,9 +201,7 @@ CASE eCurrentState OF
 
         // Accept Home only if the rising edge occurs while robot is Ready.
         IF rtStart.Q AND bReady THEN
-			
             eCurrentState := E_FanucHomingState.RequestHome;
-			
         END_IF;
 
 
@@ -213,34 +210,23 @@ CASE eCurrentState OF
 
         // Abort this FB sequence if robot Ready is lost.
         IF NOT bReady THEN
-
             eCurrentState := E_FanucHomingState.Idle;
-
         // HOME pulse completed.
         ELSIF tonHomePulse.Q THEN
-
             eCurrentState := E_FanucHomingState.WaitComplete;
-
         END_IF;
-
 
     // WAIT FOR HOME ===========================================================
     E_FanucHomingState.WaitComplete:
 
         IF NOT bReady THEN
-
             eCurrentState := E_FanucHomingState.Idle;
-
         // FANUC confirms Home position.
         ELSIF stStatus.bAt_Home THEN
-
             eCurrentState := E_FanucHomingState.Done;
-
         // Homing did not complete in time.
         ELSIF tonHomingTimeout.Q THEN
-
             eCurrentState := E_FanucHomingState.Error;
-
         END_IF;
 
 
@@ -250,23 +236,17 @@ CASE eCurrentState OF
         // Done is exposed for one PLC scan.
         eCurrentState := E_FanucHomingState.Idle;
 
-
     // ERROR ===================================================================
     E_FanucHomingState.Error:
 
         // Require Start to be released before allowing another attempt.
         IF NOT bStart THEN
-
             eCurrentState := E_FanucHomingState.Idle;
-
         END_IF;
-
 
     // INVALID / UNKNOWN STATE =================================================
     ELSE
-
         eCurrentState := E_FanucHomingState.Error;
-
 END_CASE;
 
 

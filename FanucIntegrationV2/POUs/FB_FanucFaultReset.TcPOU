@@ -56,7 +56,6 @@ CASE eCurrentState OF
 
         // Always complete the configured FAULT_RESET pulse.
         IF tonResetPulse.Q THEN
-
             // The fault may already have cleared during the pulse.
             IF NOT stStatus.bFault THEN
                 eCurrentState := E_FanucFaultResetState.Done;
@@ -72,7 +71,6 @@ CASE eCurrentState OF
 
         IF NOT stStatus.bFault THEN
             eCurrentState := E_FanucFaultResetState.Done;
-
         ELSIF tonFaultTimeout.Q THEN
             eCurrentState := E_FanucFaultResetState.Error;
         END_IF;
@@ -123,8 +121,11 @@ stControl.Fault_Reset := (eCurrentState = E_FanucFaultResetState.SendPulse) AND 
 // Diagnostic outputs
 // ============================================================================
 eState := eCurrentState;
+
 bBusy := (eCurrentState = E_FanucFaultResetState.SendPulse) OR (eCurrentState = E_FanucFaultResetState.WaitClear);
+
 bDone := (eCurrentState = E_FanucFaultResetState.Done);
+
 bError := (eCurrentState = E_FanucFaultResetState.Error);]]></ST>
     </Implementation>
   </POU>
