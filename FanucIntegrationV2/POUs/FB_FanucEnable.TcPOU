@@ -1,88 +1,44 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <TcPlcObject Version="1.1.0.1">
   <POU Name="FB_FanucEnable" Id="{81fa6fc5-96d5-6645-a3df-cf5fb91c6586}" SpecialFunc="None">
-    <Declaration><![CDATA[// Runs the FANUC enable sequence:
-// Idle -> ClearFault -> CheckTP -> WaitReady -> Ready
-//
-// External stop/hold signals use NC convention:
-// TRUE  = normal / permissive
-// FALSE = stop / hold / safe-speed request
+    <Declaration><![CDATA[// Controls the FANUC remote-enable sequence and START pulse.
+// External IMSTP, HOLD, and SFSPD signals pass through in every state.
+// Fault reset is handled separately by FB_FanucFaultReset.
 
 FUNCTION_BLOCK FB_FanucEnable
+
 VAR_INPUT
-    // Main enable command.
-    // TRUE  = enable sequence requested
-    // FALSE = disable / return to Idle
-    bEnable : BOOL;
+	bEnable		: BOOL; // TRUE requests enabling; FALSE returns the FB to Idle and clears its error.
+	stStatus	: ST_FanucStatus; // Live robot-status signals from FB_FanucStatus.
 
-    // Live robot status from FB_FanucStatus
-    stStatus : ST_FanucStatus;
+	bExtIMSTP	: BOOL; // IMSTP permissive: TRUE releases the request; FALSE requests an immediate stop.
+	bExtHold	: BOOL; // HOLD permissive: TRUE releases the request; FALSE requests a hold.
+	bExtSFSPD	: BOOL; // SFSPD permissive: TRUE releases the request; FALSE asserts the SFSPD request.
 
-    // External interlock signals.
-    // Normally Closed convention:
-    // TRUE  = normal
-    // FALSE = function requested
-    bExtIMSTP : BOOL;   // FALSE = external E-stop requested
-    bExtHold  : BOOL;   // FALSE = pause / hold requested
-    bExtSFSPD : BOOL;   // FALSE = safe-speed requested
-
-    // External program-start command.
-    // Only a rising edge that occurs while Ready is accepted.
-    bExtStart : BOOL;
-	
-	// Maximum time to wait for robot-ready feedback
-    tReadyTimeout : TIME := T#5S;
+	bExtStart	: BOOL; // Rising edge requests a START pulse while Ready; must be FALSE to begin enabling.
+	tReadyTimeout	: TIME := T#5S; // Maximum time in WaitReady for bCmd_Enabled AND bSystem_Ready.
 END_VAR
-
 
 VAR_OUTPUT
-    // Robot is enabled and ready for program execution
-    bReady : BOOL;
-
-    // Enable sequence failed / timed out
-    bError : BOOL;
-
-    // Teach Pendant is enabled and preventing remote operation
-    bTPWarning : BOOL;
-
-    // Current state for diagnostics / HMI
-    eState : E_FanucEnableState;
-
-    // FANUC control signals
-    stControl : ST_FanucControl;
+	bReady		: BOOL; // TRUE while the enable state machine is in Ready.
+	bError		: BOOL; // TRUE in Error after a ready timeout or invalid state; cleared by bEnable = FALSE.
+	bTPWarning	: BOOL; // TRUE while in CheckTP and the teach pendant is enabled.
+	eState		: E_FanucEnableState; // Current state exposed for diagnostics and HMI.
+	stControl	: ST_FanucControl; // Control structure; this FB writes Enable, IMSTP, Hold, SFSPD, and Start.
 END_VAR
-
 
 VAR
-    // Internal state
-    eCurrentState : E_FanucEnableState := E_FanucEnableState.Idle;
-
-    // TRUE only when the complete enable path is allowed.
-    //
-    // bExtStart is intentionally NOT included here.
-    // Start is a command, not an enable permissive.
-    bEnablePermissivesOk : BOOL;
-
-    // Wait for CMDENBL + SYSRDY
-    tonReadyTimeout : TON;
-
-    // Detect actual rising edge of external Start command
-    rtExtStart : R_TRIG;
-
-    // Internal START pulse latch
-    bStartPulseActive : BOOL;
-
-    // START pulse timer
-    tonStartPulse : TON;
+	eCurrentState : E_FanucEnableState := E_FanucEnableState.Idle; // Internal state used by the sequence.
+	bEnablePermissivesOk : BOOL; // TRUE when bEnable, bExtIMSTP, bExtHold, and bExtSFSPD are all TRUE.
+	tonReadyTimeout : TON; // Measures the time spent waiting in WaitReady.
+	rtExtStart : R_TRIG; // Detects the FALSE-to-TRUE transition of bExtStart.
+	bStartPulseActive : BOOL; // Latches the START pulse until its timer expires or Ready is lost.
+	tonStartPulse : TON; // Measures the active START pulse duration.
 END_VAR
-
 
 VAR CONSTANT
-
-    // FANUC START signal pulse duration
-    tStartPulse : TIME := T#20MS;
+	tStartPulse : TIME := T#20MS; // Requested duration of the START output pulse on UI[6].
 END_VAR
-
 
 (*
     FB_FanucEnable

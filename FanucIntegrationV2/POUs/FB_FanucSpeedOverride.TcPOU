@@ -1,44 +1,26 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <TcPlcObject Version="1.1.0.1">
   <POU Name="FB_FanucSpeedOverride" Id="{7fe993ee-da03-4a39-824e-7c02eccb23c1}" SpecialFunc="None">
-    <Declaration><![CDATA[// Writes the FANUC speed-override percentage to the configured
-// Group Input through stControl.Overwrite.
-//
-// This is a continuous setpoint, not a pulse command:
-//     0   = 0% programmed speed
-//     100 = 100% programmed speed
-//
-// Values above 100 are rejected. In that case, the commanded
-// overwrite is forced to 0% and bError becomes TRUE.
-//
-// Call this FB every PLC scan before FB_FanucControl.
+    <Declaration><![CDATA[// Continuously writes the validated speed-override command.
+// Values above 100 produce a 0% command and set bError.
 
 FUNCTION_BLOCK FB_FanucSpeedOverride
 
 VAR_INPUT
-    // Requested FANUC speed override in percent.
-    // Valid range: 0..100.
-    nOverwrite : BYTE;
+	nOverwrite	: BYTE; // Requested speed override in percent; valid range: 0..100.
 END_VAR
 
 VAR_IN_OUT
-    // Shared FANUC control structure.
-    // Use the same instance passed to the other FANUC control FBs
-    // and finally to FB_FanucControl.
-    stControl : ST_FanucControl;
+	stControl	: ST_FanucControl; // Shared FANUC control structure; this FB writes Overwrite only.
 END_VAR
 
 VAR_OUTPUT
-    // TRUE while nOverwrite is outside the supported range.
-    bError : BOOL;
-
-    // Actual overwrite value written to stControl.
-    nActual : BYTE;
+	bError	: BOOL; // TRUE while nOverwrite exceeds cMaxOverwrite; clears when the input becomes valid.
+	nActual	: BYTE; // Override command written to stControl.Overwrite; not robot feedback. Invalid input produces 0.
 END_VAR
 
 VAR CONSTANT
-    // Maximum supported FANUC speed-override percentage.
-    cMaxOverwrite : BYTE := 100;
+	cMaxOverwrite	: BYTE := 100; // Maximum accepted speed-override command in percent.
 END_VAR]]></Declaration>
     <Implementation>
       <ST><![CDATA[// Input validation
@@ -64,7 +46,7 @@ END_IF;
 // Continuously write the validated overwrite value to the shared
 // FANUC control structure.
 
-stControl.Overwrite := nActual;]]></ST>
+stControl.Override := nActual;]]></ST>
     </Implementation>
   </POU>
 </TcPlcObject>

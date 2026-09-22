@@ -1,35 +1,38 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.19">
+<TcPlcObject Version="1.1.0.1">
   <DUT Name="ST_FanucControl" Id="{8e1d735f-4267-0b3b-813d-d295b57f3bd3}">
-    <Declaration><![CDATA[TYPE ST_FanucControl : STRUCT
-//  Control byte 0
-  IMSTP			:  BOOL;  //  (* bit 0 *)
-  Hold			:  BOOL;  //  (* bit 1 *)
-  SFSPD			:  BOOL;  //  (* bit 2 *)
-  Cycle_stop	:  BOOL;  //  (* bit 3 *)
-  Fault_Reset	:  BOOL;  //  (* bit 4 *)
-  Start			:  BOOL;  //  (* bit 5 *)
-  Home			:  BOOL;  //  (* bit 6 *)
-  Enable		:  BOOL;  //  (* bit 7 *)
+    <Declaration><![CDATA[// FANUC command signals encoded by FB_FanucControl.
+// UI numbers refer to robot inputs; aDO references refer to PLC output bytes.
 
-//  Control byte 1  (UI[9..16]  RSR1..RSR8 / PNS1..PNS8)
-  Start_Program1    :  BOOL;  //  UI[9]  RSR1 / PNS bit 0
-  Start_Program2    :  BOOL;  //  UI[10] RSR2 / PNS bit 1
-  Start_Program3    :  BOOL;  //  UI[11] RSR3 / PNS bit 2
-  Start_Program4    :  BOOL;  //  UI[12] RSR4 / PNS bit 3
-  Start_Program5    :  BOOL;  //  UI[13] RSR5 / PNS bit 4
-  Start_Program6    :  BOOL;  //  UI[14] RSR6 / PNS bit 5
-  Start_Program7    :  BOOL;  //  UI[15] RSR7 / PNS bit 6
-  Start_Program8    :  BOOL;  //  UI[16] RSR8 / PNS bit 7
+TYPE ST_FanucControl :
+STRUCT
+	// Control byte 0: UI[1..8].
+	IMSTP 		: BOOL; // aDO[0].0 | UI[1] *IMSTP: TRUE releases the request; FALSE requests an immediate stop.
+	Hold		: BOOL; // aDO[0].1 | UI[2] *HOLD: TRUE releases the request; FALSE requests a hold.
+	SFSPD		: BOOL; // aDO[0].2 | UI[3] *SFSPD: TRUE releases the request; FALSE asserts the SFSPD request.
+	Cycle_stop	: BOOL; // aDO[0].3 | UI[4] CSTOPI: Cycle Stop command; effect depends on FANUC configuration.
+	Fault_Reset	: BOOL; // aDO[0].4 | UI[5] FAULT_RESET: command pulse to reset clearable robot faults.
+	Start		: BOOL; // aDO[0].5 | UI[6] START: start/resume command signal.
+	Home		: BOOL; // aDO[0].6 | UI[7] HOME: command signal for the configured homing macro.
+	Enable		: BOOL; // aDO[0].7 | UI[8] ENBL: TRUE enables motion subject to the remaining robot conditions.
 
-//  Control byte 2  (UI[17..18])
-  PNS_Strobe      :  BOOL;
-  Prod_Start      :  BOOL;  //  UI[18] PROD_START – triggers PNS program execution
+	// Control byte 1: RSR selections or PNS bits, depending on robot mode.
+	Start_Program1	: BOOL; // aDO[1].0 | UI[9]: RSR1 request or PNS bit 0.
+	Start_Program2	: BOOL; // aDO[1].1 | UI[10]: RSR2 request or PNS bit 1.
+	Start_Program3	: BOOL; // aDO[1].2 | UI[11]: RSR3 request or PNS bit 2.
+	Start_Program4	: BOOL; // aDO[1].3 | UI[12]: RSR4 request or PNS bit 3.
+	Start_Program5	: BOOL; // aDO[1].4 | UI[13]: RSR5 request or PNS bit 4.
+	Start_Program6	: BOOL; // aDO[1].5 | UI[14]: RSR6 request or PNS bit 5.
+	Start_Program7	: BOOL; // aDO[1].6 | UI[15]: RSR7 request or PNS bit 6.
+	Start_Program8	: BOOL; // aDO[1].7 | UI[16]: RSR8 request or PNS bit 7.
 
-//  Control byte 3  (GI[25..33] – user-defined output)
-  Overwrite            :  BYTE;
+	// Control byte 2: PNS command signals.
+	PNS_Strobe	: BOOL; // aDO[2].0 | UI[17] PNSTROBE: strobe for PNS program selection.
+	Prod_Start	: BOOL; // aDO[2].1 | UI[18] PROD_START: execution request for the selected PNS program.
+
+	// Control byte 3: application-configured speed override.
+	Override : BYTE; // aDO[3] | Speed-override command in percent; map to the configured FANUC Group Input.
 END_STRUCT
-END_TYPE
-]]></Declaration>
+END_TYPE]]></Declaration>
   </DUT>
 </TcPlcObject>

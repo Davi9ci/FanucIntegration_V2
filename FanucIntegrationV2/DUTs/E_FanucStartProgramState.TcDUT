@@ -1,20 +1,16 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <TcPlcObject Version="1.1.0.1">
   <DUT Name="E_FanucStartProgramState" Id="{e5f6a7b8-c9d0-1234-ef01-234567890abc}">
-    <Declaration><![CDATA[(*
-  States for FB_FanucStartProgram.
-  Sequence: Idle → Pulsing → Done (→ Idle)
-  Error on invalid program number; reset by setting bStart FALSE.
-*)
+    <Declaration><![CDATA[// States used by FB_FanucStartProgram.
+
 TYPE E_FanucStartProgramState :
 (
-	Idle       := 0,   // Waiting for Start rising edge
-    Pulsing    := 1,   // Selected RSR signal asserted
-    WaitAck    := 2,   // Waiting for FANUC ACK
-    Done       := 3,   // ACK received - one PLC scan
-    Error      := 99   // Invalid program or ACK timeout
+	Idle	:= 0, // Waits for a rising edge of bStart while bReady = TRUE, then validates nProgram.
+	Pulsing	:= 1, // Generates the selected RSR pulse for tProgramPulse and monitors its ACK.
+	WaitAck	:= 2, // Waits for a fresh matching ACK within tAckTimeout after the pulse.
+	Done	:= 3, // Sets bDone for one PLC scan to confirm acknowledgement, then returns to Idle.
+	Error	:= 99 // Sets bError; bStart = FALSE returns to Idle.
 );
-END_TYPE
-]]></Declaration>
+END_TYPE]]></Declaration>
   </DUT>
 </TcPlcObject>

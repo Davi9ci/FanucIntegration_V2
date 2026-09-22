@@ -1,32 +1,18 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <TcPlcObject Version="1.1.0.1">
   <POU Name="FB_FanucStatus" Id="{df9eb45c-f9bf-0d9c-9783-95f21f1f968c}" SpecialFunc="None">
-    <Declaration><![CDATA[//Reads EtherCAT input bytes (aDI) into ST_FanucStatus. Call every scan BEFORE any status-dependent logic. Pass GVL_Fanuc.DI0 at the call site.
+    <Declaration><![CDATA[// Maps the FANUC input bytes to robot-status signals.
+// Call every PLC scan before status-dependent logic.
+
 FUNCTION_BLOCK FB_FanucStatus
+
 VAR_IN_OUT
-  aDI : ARRAY[0..15] OF BYTE; // Injected EtherCAT input array – pass GVL_Fanuc.DI0
+	aDI : ARRAY[0..15] OF BYTE; // Hardware-linked input bytes; pass GVL_Fanuc.DI0. Reads bytes 0..2.
 END_VAR
+
 VAR_OUTPUT
-  stStatus : ST_FanucStatus;
-END_VAR
-
-(*
-  FB_FanucStatus
-  Reads the raw EtherCAT input byte array (injected as aDI) and maps
-  each bit to the corresponding field in ST_FanucStatus.
-
-  Call every PLC cycle BEFORE any logic that depends on robot status.
-
-  Library usage – I/O injection:
-    The caller passes the hardware-linked byte array at the call site:
-      fbStatus(aDI := GVL_Fanuc.DI0, stStatus => stStatus);
-    This keeps AT %I* declarations out of the library.
-
-  Signal mapping (FANUC R-30iB Plus, PDO3 – Receive PDO3):
-    aDI[0]  ← Robot UO[1..8]   (CMDENBL, SYSRDY, PROGRUN, PAUSED, HELD, FAULT, ATPERCH, TPENBL)
-    aDI[1]  ← Robot UO[9..10]  (BATALM, BUSY)
-    aDI[2]  ← Robot UO[11..18] (ACK1..ACK8 / SNO1..SNO8)
-*)]]></Declaration>
+	stStatus : ST_FanucStatus; // Robot-status signals decoded from aDI during this call.
+END_VAR]]></Declaration>
     <Implementation>
       <ST><![CDATA[
 // Status Byte 0  (aDI[0])  -  UO[1..8]

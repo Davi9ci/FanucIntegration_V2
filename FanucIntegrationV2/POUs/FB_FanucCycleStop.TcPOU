@@ -1,66 +1,30 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <TcPlcObject Version="1.1.0.1">
   <POU Name="FB_FanucCycleStop" Id="{d5a33dbe-22de-9816-1841-daac460200c0}" SpecialFunc="None">
-    <Declaration><![CDATA[// Sends the FANUC Cycle Stop command using CSTOPI (UI[4]).
-//
-// A rising edge of bStart generates a CSTOPI pulse for
-// tCycleStopPulse.
-//
-// The actual FANUC behavior depends on the controller setting
-// "CSTOPI for ABORT":
-//
-// DISABLE:
-//     Programs waiting in the RSR queue are cleared.
-//     The currently running program continues until completion.
-//
-// ENABLE:
-//     Programs waiting in the RSR queue are cleared.
-//     The currently running program is immediately aborted.
-//
-// This setting is configured in the FANUC controller and cannot
-// be selected through this function block.
-//
-// No acknowledgement is available for CSTOPI. Therefore, bDone
-// indicates that the output pulse was transmitted-not that robot
-// motion has stopped.
+    <Declaration><![CDATA[// Pulses CSTOPI; the FANUC "CSTOPI for ABORT" setting determines its effect.
+// Completion confirms the output pulse only; no robot acknowledgement is checked.
 
 FUNCTION_BLOCK FB_FanucCycleStop
 
 VAR_INPUT
-    // External Cycle Stop request.
-    // Only a real FALSE -> TRUE edge is accepted.
-    bStart : BOOL;
-
-    // Duration for which CSTOPI is asserted.
-    tCycleStopPulse : TIME := T#20MS;
+	bStart			: BOOL; // Rising edge starts a Cycle Stop request while Idle.
+	tCycleStopPulse	: TIME := T#20MS; // Requested duration of the CSTOPI output pulse on UI[4].
 END_VAR
 
 VAR_IN_OUT
-    // Shared FANUC control structure.
-    stControl : ST_FanucControl;
+	stControl	: ST_FanucControl; // Shared FANUC control structure; this FB writes Cycle_stop only.
 END_VAR
 
 VAR_OUTPUT
-    // TRUE while CSTOPI is being asserted.
-    bBusy : BOOL;
-
-    // TRUE for one PLC scan after the CSTOPI pulse completes.
-    bDone : BOOL;
-
-    // Current state for diagnostics / HMI.
-    eState : E_FanucCstopiState;
+	bBusy	: BOOL; // TRUE while the sequence is in Pulsing.
+	bDone	: BOOL; // TRUE for one PLC scan after the pulse completes; does not confirm stopped motion.
+	eState	: E_FanucCstopiState; // Current state exposed for diagnostics and HMI.
 END_VAR
 
 VAR
-    // Internal state.
-    eCurrentState : E_FanucCstopiState :=
-        E_FanucCstopiState.Idle;
-
-    // Detect the actual FALSE -> TRUE transition.
-    rtStart : R_TRIG;
-
-    // CSTOPI output pulse timer.
-    tonCycleStopPulse : TON;
+	eCurrentState		: E_FanucCstopiState := E_FanucCstopiState.Idle; // Internal state used by the sequence.
+	rtStart				: R_TRIG; // Detects the FALSE-to-TRUE transition of bStart.
+	tonCycleStopPulse	: TON; // Measures the CSTOPI pulse duration in Pulsing.
 END_VAR]]></Declaration>
     <Implementation>
       <ST><![CDATA[// Start edge detection

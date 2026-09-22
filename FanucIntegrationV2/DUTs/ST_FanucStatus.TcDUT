@@ -1,33 +1,35 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.19">
+<TcPlcObject Version="1.1.0.1">
   <DUT Name="ST_FanucStatus" Id="{69ae04d4-120a-d7b7-1ae0-43a6c576bcad}">
-    <Declaration><![CDATA[TYPE ST_FanucStatus : STRUCT
-  //DI[0,0] - Status Byte 0
-  bCmd_Enabled	: BOOL;  (* bit 0 *)
-  bSystem_Ready	: BOOL;  (* bit 1 *)
-  bPrg_Running	: BOOL;  (* bit 2 *)
-  bPrg_Paused	: BOOL;  (* bit 3 *)
-  bMotion_Held	: BOOL;  (* bit 4 *)
-  bFault		: BOOL;  (* bit 5 *)
-  bAt_Home 		: BOOL;  (* bit 6 *)
-  bTP_Enabled	: BOOL;  (* BIT 7 *)
+    <Declaration><![CDATA[// FANUC feedback signals decoded by FB_FanucStatus.
+// UO numbers refer to robot outputs; aDI references refer to PLC input bytes.
 
-  //DI[0,1] - Status Byte 1
-  bBatteryAlarm :BOOL; (* bit 1 *)
-  bBusy :BOOL;  (* bit 2 *)
+TYPE ST_FanucStatus :
+STRUCT
+	// Status byte 0: UO[1..8].
+	bCmd_Enabled	: BOOL; // aDI[0].0 | UO[1] CMDENBL: TRUE when the robot reports command enable.
+	bSystem_Ready	: BOOL; // aDI[0].1 | UO[2] SYSRDY: TRUE when the robot reports system ready.
+	bPrg_Running	: BOOL; // aDI[0].2 | UO[3] PROGRUN: TRUE when the robot reports program execution.
+	bPrg_Paused		: BOOL; // aDI[0].3 | UO[4] PAUSED: TRUE when the robot reports a paused program.
+	bMotion_Held	: BOOL; // aDI[0].4 | UO[5] HELD: TRUE when the robot reports motion held.
+	bFault			: BOOL; // aDI[0].5 | UO[6] FAULT: TRUE when the robot reports a fault.
+	bAt_Home		: BOOL; // aDI[0].6 | UO[7] ATPERCH: TRUE at the configured reference position used as Home.
+	bTP_Enabled		: BOOL; // aDI[0].7 | UO[8] TPENBL: TRUE when the teach pendant is enabled.
 
-  //DI[0,2] - Status Byte 2
-  bProg_Start1ACK  : BOOL;  (* bit 1 *)
-  bProg_Start2ACK  : BOOL;  (* bit 2 *)
-  bProg_Start3ACK  : BOOL;  (* bit 3 *)
-  bProg_Start4ACK  : BOOL;  (* bit 4 *)
-  bProg_Start5ACK  : BOOL;  (* bit 5 *)
-  bProg_Start6ACK  : BOOL;  (* bit 6 *)
-  bProg_Start7ACK  : BOOL;  (* bit 7 *)
-  bProg_Start8ACK  : BOOL;  (* bit 8 *)
+	// Status byte 1: UO[9..10].
+	bBatteryAlarm	: BOOL; // aDI[1].0 | UO[9] BATALM: TRUE when the robot reports a battery alarm.
+	bBusy			: BOOL; // aDI[1].1 | UO[10] BUSY: robot busy indication; separate from individual FB busy outputs.
 
+	// Status byte 2: RSR acknowledgements or PNS selection feedback.
+	bProg_Start1ACK	: BOOL; // aDI[2].0 | UO[11]: RSR1 acknowledgement or SNO1 in PNS mode.
+	bProg_Start2ACK	: BOOL; // aDI[2].1 | UO[12]: RSR2 acknowledgement or SNO2 in PNS mode.
+	bProg_Start3ACK	: BOOL; // aDI[2].2 | UO[13]: RSR3 acknowledgement or SNO3 in PNS mode.
+	bProg_Start4ACK	: BOOL; // aDI[2].3 | UO[14]: RSR4 acknowledgement or SNO4 in PNS mode.
+	bProg_Start5ACK	: BOOL; // aDI[2].4 | UO[15]: RSR5 acknowledgement or SNO5 in PNS mode.
+	bProg_Start6ACK	: BOOL; // aDI[2].5 | UO[16]: RSR6 acknowledgement or SNO6 in PNS mode.
+	bProg_Start7ACK	: BOOL; // aDI[2].6 | UO[17]: RSR7 acknowledgement or SNO7 in PNS mode.
+	bProg_Start8ACK	: BOOL; // aDI[2].7 | UO[18]: RSR8 acknowledgement or SNO8 in PNS mode.
 END_STRUCT
-END_TYPE
-]]></Declaration>
+END_TYPE]]></Declaration>
   </DUT>
 </TcPlcObject>

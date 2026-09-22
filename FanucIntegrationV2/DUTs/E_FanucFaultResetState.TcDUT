@@ -1,20 +1,16 @@
-<?xml version="1.0" encoding="utf-8"?>
-<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.18">
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
   <DUT Name="E_FanucFaultResetState" Id="{9016ccc7-d5a8-3a1b-bdec-5f74d6e91223}">
-    <Declaration><![CDATA[(*
-  States for FB_FanucFaultReset.
-  Sequence: Idle → SendPulse → WaitClear → Done (→ Idle).
-  Error on timeout; reset by setting bReset FALSE.
-*)
+    <Declaration><![CDATA[// States used by FB_FanucFaultReset.
+
 TYPE E_FanucFaultResetState :
 (
-  Idle      := 0,   // Waiting for bReset rising edge.
-  SendPulse := 1,   // FAULT_RESET signal pulsed for 20 ms (robot acts on rising edge).
-  WaitClear := 2,   // Waiting for bFault = FALSE (configurable timeout → Error).
-  Done      := 3,   // Fault cleared – bDone TRUE for one scan, then → Idle.
-  Error     := 99   // Fault persisted after reset attempt. Set bReset FALSE to reset.
+	Idle		:= 0, // Waits for a rising edge of bReset.
+	SendPulse	:= 1, // Generates the FAULT_RESET pulse for tResetPulse.
+	WaitClear	:= 2, // Waits for bFault = FALSE within tFaultTimeout after the pulse.
+	Done		:= 3, // Sets bDone for one PLC scan, then returns to Idle.
+	Error		:= 99 // Sets bError; bReset = FALSE returns to Idle.
 );
-END_TYPE
-]]></Declaration>
+END_TYPE]]></Declaration>
   </DUT>
 </TcPlcObject>

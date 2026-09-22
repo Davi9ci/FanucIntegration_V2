@@ -1,67 +1,37 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <TcPlcObject Version="1.1.0.1">
   <POU Name="FB_FanucFaultReset" Id="{daeb7cee-3c71-0abb-a37b-b222806c74f1}" SpecialFunc="None">
-    <Declaration><![CDATA[// Sends a FAULT_RESET pulse to the FANUC robot and waits for
-// the active fault indication to clear.
-//
-// A rising edge of bReset generates a FAULT_RESET pulse for
-// tResetPulse. After the pulse, the FB waits for bFault to become
-// FALSE. If the fault remains active longer than tFaultTimeout,
-// the FB enters Error.
+    <Declaration><![CDATA[// Pulses FAULT_RESET and confirms that the FANUC fault indication is FALSE.
+// Call every PLC scan.
 
 FUNCTION_BLOCK FB_FanucFaultReset
 
 VAR_INPUT
-    // External fault-reset request.
-    // Only a real FALSE -> TRUE edge is accepted.
-    bReset : BOOL;
-
-    // Live robot status from FB_FanucStatus.
-    stStatus : ST_FanucStatus;
-
-    // Maximum time to wait for the FANUC fault indication to clear
-    // after the FAULT_RESET pulse has completed.
-    tFaultTimeout : TIME := T#5S;
+	bReset			: BOOL; // Rising edge starts a reset request while Idle; FALSE clears the FB error.
+	stStatus		: ST_FanucStatus; // Live robot-status signals from FB_FanucStatus.
+	tFaultTimeout	: TIME := T#5S; // Maximum wait for bFault = FALSE after the reset pulse completes.
 END_VAR
 
 VAR_IN_OUT
-    // Shared FANUC control structure.
-    stControl : ST_FanucControl;
+	stControl : ST_FanucControl; // Shared FANUC control structure; this FB writes Fault_Reset only.
 END_VAR
 
 VAR_OUTPUT
-    // TRUE while transmitting FAULT_RESET or waiting for bFault to clear.
-    bBusy : BOOL;
-
-    // TRUE for one PLC scan after the fault is confirmed cleared.
-    bDone : BOOL;
-
-    // TRUE when the fault did not clear within tFaultTimeout.
-    // Reset by releasing bReset.
-    bError : BOOL;
-
-    // Current state for diagnostics / HMI.
-    eState : E_FanucFaultResetState;
+	bBusy	: BOOL; // TRUE while in SendPulse or WaitClear.
+	bDone	: BOOL; // TRUE for one PLC scan when the pulse is complete and bFault is FALSE.
+	bError	: BOOL; // TRUE in Error after a fault-clear timeout or invalid state; cleared by bReset = FALSE.
+	eState	: E_FanucFaultResetState; // Current state exposed for diagnostics and HMI.
 END_VAR
 
 VAR
-    // Internal state.
-    eCurrentState : E_FanucFaultResetState :=
-        E_FanucFaultResetState.Idle;
-
-    // Detect the actual FALSE -> TRUE transition.
-    rtReset : R_TRIG;
-
-    // FAULT_RESET output pulse timer.
-    tonResetPulse : TON;
-
-    // Timeout while waiting for bFault to clear.
-    tonFaultTimeout : TON;
+	eCurrentState	: E_FanucFaultResetState := E_FanucFaultResetState.Idle; // Internal state used by the sequence.
+	rtReset			: R_TRIG; // Detects the FALSE-to-TRUE transition of bReset.
+	tonResetPulse	: TON; // Measures the FAULT_RESET pulse duration in SendPulse.
+	tonFaultTimeout	: TON; // Measures the wait for bFault = FALSE in WaitClear.
 END_VAR
 
 VAR CONSTANT
-    // FANUC FAULT_RESET pulse duration.
-    tResetPulse : TIME := T#20MS;
+	tResetPulse	: TIME := T#20MS; // Requested duration of the FAULT_RESET output pulse on UI[5].
 END_VAR]]></Declaration>
     <Implementation>
       <ST><![CDATA[// Reset edge detection

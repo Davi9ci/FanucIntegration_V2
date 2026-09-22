@@ -1,105 +1,43 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <TcPlcObject Version="1.1.0.1">
   <POU Name="FB_FanucStartProgram" Id="{639e9b5b-2378-78fc-0e0b-e22f6bfc1f16}" SpecialFunc="None">
-    <Declaration><![CDATA[// Starts a FANUC program using RSR1..RSR8.
-//
-// A rising edge of bStart is accepted only while the robot is Ready.
-// The requested program number is latched when the command is accepted.
-//
-// The selected RSR signal is asserted for tProgramPulse.
-// During and after the pulse, the FB waits for the corresponding
-// FANUC ACK signal.
-//
-// Completion is confirmed only when a fresh ACK is received.
-//
-// If robot Ready is lost during the sequence, the FB returns to Idle.
+    <Declaration><![CDATA[// Pulses the selected RSR signal and waits for a fresh matching acknowledgement.
+// Loss of bReady returns the FB to Idle without confirming the request.
 
 FUNCTION_BLOCK FB_FanucStartProgram
 
 VAR_INPUT
-
-    // External program-start request.
-    bStart : BOOL;
-
-    // RSR program number. Valid range: 1..8.
-    nProgram : INT;
-
-    // Robot Ready indication from FB_FanucEnable.
-    // Program start can only begin and continue while Ready.
-    bReady : BOOL;
-
-    // Maximum time allowed after the RSR pulse
-    // for FANUC to acknowledge the program request.
-    tAckTimeout : TIME := T#2S;
-
-    // Live robot status from FB_FanucStatus.
-    stStatus : ST_FanucStatus;
-
+	bStart		: BOOL; // Rising edge starts a request while Idle and bReady; FALSE clears the FB error.
+	nProgram	: INT; // Requested RSR selection, 1..8; latched when a valid request is accepted.
+	bReady		: BOOL; // Enable permissive from FB_FanucEnable; must remain TRUE throughout the sequence.
+	tAckTimeout	: TIME := T#2S; // Maximum additional wait for acknowledgement after the RSR pulse completes.
+	stStatus	: ST_FanucStatus; // Live robot-status signals from FB_FanucStatus.
 END_VAR
-
 
 VAR_IN_OUT
-
-    stControl : ST_FanucControl;
-
+	stControl	: ST_FanucControl; // Shared FANUC control structure; this FB writes Start_Program1..8 only.
 END_VAR
-
 
 VAR_OUTPUT
-
-    // TRUE while the program-start sequence is active.
-    bRequestActive : BOOL;
-
-    // TRUE for one PLC scan when FANUC acknowledges the requested program successfully.
-    bDone : BOOL;
-
-    // TRUE when:
-    // - nProgram is outside 1..8
-    // - FANUC does not acknowledge before tAckTimeout
-    bError : BOOL;
-
-    // Current state for diagnostics / HMI.
-    eState : E_FanucStartProgramState;
-
+	bRequestActive	: BOOL; // TRUE while in Pulsing or WaitAck; does not indicate program execution.
+	bDone			: BOOL; // TRUE for one PLC scan after the pulse completes and a fresh matching ACK is detected.
+	bError			: BOOL; // TRUE in Error after invalid selection, ACK timeout, or invalid state; cleared by bStart = FALSE.
+	eState			: E_FanucStartProgramState; // Current state exposed for diagnostics and HMI.
 END_VAR
 
-
 VAR
-
-    // Internal state.
-    eCurrentState : E_FanucStartProgramState := E_FanucStartProgramState.Idle;
-
-    // Detect actual FALSE -> TRUE transition of external Start.
-    rtStart : R_TRIG;
-
-    // Program number latched when a request is accepted.
-    // This prevents nProgram changes during the sequence
-    // from changing the active RSR output.
-    nActiveProgram : INT;
-
-    // ACK corresponding to nActiveProgram.
-    bActiveAck : BOOL;
-
-    // TRUE once the selected ACK has first been observed LOW.
-    //
-    // This prevents an ACK that was already TRUE before the
-    // new command from being accepted as a fresh acknowledgement.
-    bAckArmed : BOOL;
-
-    // TRUE once a valid fresh ACK has been detected.
-    bAckSeen : BOOL;
-
-    // RSR output pulse timer.
-    tonProgramPulse : TON;
-
-    // Timeout waiting for FANUC acknowledgement.
-    tonAckTimeout : TON;
-
+	eCurrentState	: E_FanucStartProgramState := E_FanucStartProgramState.Idle; // Internal state used by the sequence.
+	rtStart			: R_TRIG; // Detects the FALSE-to-TRUE transition of bStart.
+	nActiveProgram	: INT; // Latched RSR selection used for the active output and matching ACK.
+	bActiveAck		: BOOL; // Current acknowledgement signal corresponding to nActiveProgram.
+	bAckArmed		: BOOL; // TRUE once the selected ACK has been observed FALSE during the active sequence.
+	bAckSeen		: BOOL; // Latched TRUE when the selected ACK is TRUE after acknowledgement detection is armed.
+	tonProgramPulse	: TON; // Measures the selected RSR pulse duration in Pulsing.
+	tonAckTimeout	: TON; // Measures the additional acknowledgement wait in WaitAck.
 END_VAR
 
 VAR CONSTANT
-    // FANUC RSR command pulse duration.
-    tProgramPulse : TIME := T#200MS;
+	tProgramPulse : TIME := T#200MS; // Requested duration of the selected RSR output pulse on UI[9..16].
 END_VAR]]></Declaration>
     <Implementation>
       <ST><![CDATA[// Start edge detection

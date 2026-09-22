@@ -1,18 +1,18 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <TcPlcObject Version="1.1.0.1">
   <POU Name="FB_FanucControl" Id="{6eb22996-056c-23a2-8b8f-39dcb588e3c6}" SpecialFunc="None">
-    <Declaration><![CDATA[// Writes ST_FanucControl fields to EtherCAT output bytes (aDO).
-// Should be called every scan after all control logic is complete.
+    <Declaration><![CDATA[// Maps the FANUC control signals to the output bytes.
+// Call every PLC scan after all FANUC command FBs.
 
 FUNCTION_BLOCK FB_FanucControl
+
 VAR_IN_OUT
-  aDO : ARRAY[0..15] OF BYTE; // Injected EtherCAT output array – pass GVL_Fanuc.DO0
-END_VAR
-VAR_INPUT
-  stControl : ST_FanucControl;
+	aDO : ARRAY[0..15] OF BYTE; // Hardware-linked output bytes; pass GVL_Fanuc.DO0. Writes bytes 0..3.
 END_VAR
 
-]]></Declaration>
+VAR_INPUT
+	stControl : ST_FanucControl; // Combined FANUC commands to encode into aDO.
+END_VAR]]></Declaration>
     <Implementation>
       <ST><![CDATA[
 // Control Byte 0  (aDO[0])  -  UI[1..8]
@@ -40,7 +40,7 @@ aDO[2].0 := stControl.PNS_Strobe;                   // UI[17] reserved
 aDO[2].1 := stControl.Prod_Start;   // UI[18] PROD_START – triggers PNS program execution
 
 // Control Byte 3  (aDO[3])  -  GI[25..33] user-defined output
-aDO[3] := stControl.Overwrite;
+aDO[3] := stControl.Override;
 ]]></ST>
     </Implementation>
   </POU>
