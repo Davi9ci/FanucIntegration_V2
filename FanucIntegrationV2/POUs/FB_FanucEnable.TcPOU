@@ -19,12 +19,15 @@ VAR_INPUT
 	tReadyTimeout	: TIME := T#5S; // Maximum time in WaitReady for bCmd_Enabled AND bSystem_Ready.
 END_VAR
 
+VAR_IN_OUT
+	stControl : ST_FanucControl; // Shared control structure; writes Enable, IMSTP, Hold, SFSPD, and Start only.
+END_VAR
+
 VAR_OUTPUT
 	bReady		: BOOL; // TRUE while the enable state machine is in Ready.
 	bError		: BOOL; // TRUE in Error after a ready timeout or invalid state; cleared by bEnable = FALSE.
 	bTPWarning	: BOOL; // TRUE while in CheckTP and the teach pendant is enabled.
 	eState		: E_FanucEnableState; // Current state exposed for diagnostics and HMI.
-	stControl	: ST_FanucControl; // Control structure; this FB writes Enable, IMSTP, Hold, SFSPD, and Start.
 END_VAR
 
 VAR

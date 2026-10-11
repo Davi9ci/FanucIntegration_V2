@@ -49,16 +49,16 @@ fbStatus(aDI := GVL_Fanuc.DI0, stStatus => stStatus);
 fbEnable(
     bEnable		:= bEnableRobot,
     stStatus	:= stStatus,
-    bExtIMSTP	:= bExtIMSTP,   // Wire from: NOT bSoftEStop
-    bExtHold	:= bExtHold,    // Wire from: NOT bPauseButton
-    bExtSFSPD	:= bExtSFSPD,   // Wire from: bFenceOK / area scanner
-    bExtStart 	:= bExtStart,   // Wire from: HMI start button
+    bExtIMSTP	:= bExtIMSTP,   
+    bExtHold	:= bExtHold,    
+    bExtSFSPD	:= bExtSFSPD,   
+    bExtStart 	:= bExtStart,  
 	tReadyTimeout := T#5S,
+	stControl := stControl,
 	bReady=> , 
 	bError=> , 
 	bTPWarning=> , 
-	eState=> , 
-    stControl => stControl);
+	eState=> );
 	
 // 3. Homing
 fbHoming(
